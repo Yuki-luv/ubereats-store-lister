@@ -14,6 +14,30 @@ from normalizer import normalize_phone, normalize_address, detect_phone_issues, 
 import history
 import streamlit.components.v1 as components
 
+import streamlit as st
+
+# --- 認証機能：これより上に追加 ---
+def check_password():
+    if "password_correct" not in st.session_state:
+        st.session_state.password_correct = False
+
+    if not st.session_state.password_correct:
+        st.title("🔒 ログイン")
+        pwd = st.text_input("パスワード", type="password")
+        if st.button("ログイン"):
+            if pwd == st.secrets["password"]: # StreamlitのSecretsに設定したパスワード
+                st.session_state.password_correct = True
+                st.rerun()
+            else:
+                st.error("パスワードが違います")
+        return False
+    return True
+
+if not check_password():
+    st.stop() # パスワードが通るまで、下の既存コードを読み込ませない
+
+# --- ここから下に、今の app.py の中身を全部そのまま貼る ---
+
 
 # ───────────────────────────────────────────
 # ページ設定
