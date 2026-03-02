@@ -15,7 +15,11 @@ import history
 import streamlit.components.v1 as components
 import streamlit as st
 import os
+import sys
 
+# オンライン環境でPlaywrightのブラウザをインストールさせる
+if os.environ.get("STREAMLIT_SERVER_PORT"):
+    os.system(f"{sys.executable} -m playwright install chromium")
 # オンライン環境の時だけ、ブラウザ本体を強制的にインストールする
 if os.environ.get("STREAMLIT_SERVER_PORT"):
     os.system("playwright install chromium")
