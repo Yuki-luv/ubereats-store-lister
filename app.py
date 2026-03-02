@@ -13,8 +13,12 @@ from scraper import run_scraper
 from normalizer import normalize_phone, normalize_address, detect_phone_issues, detect_address_issues
 import history
 import streamlit.components.v1 as components
-
 import streamlit as st
+import os
+
+# オンライン環境の時だけ、ブラウザ本体を強制的にインストールする
+if os.environ.get("STREAMLIT_SERVER_PORT"):
+    os.system("playwright install chromium")
 
 # --- 認証機能：これより上に追加 ---
 def check_password():
