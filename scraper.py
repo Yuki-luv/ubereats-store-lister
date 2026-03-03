@@ -15,7 +15,7 @@ def run_scraper(
     progress_callback=None,
     status_callback=None,
     exclude_urls: list = None
-) -> list[dict]:
+) -> tuple[list[dict], int, str]:
     """
     別プロセスでスクレイパーを実行して結果を取得する。
     """
@@ -57,6 +57,7 @@ def run_scraper(
         
         stores = []
         total_count = 0
+        raw_logs = []
         
         # リアルタイムで出力を読む
         if process.stdout:
@@ -78,16 +79,25 @@ def run_scraper(
                         if status_callback:
                             status_callback(f"エラー: {msg.get('message', '')}")
                 except json.JSONDecodeError:
+                    raw_logs.append(line)
                     continue
                 except Exception:
                     continue
             
         process.wait()
         
+        err_out = process.stderr.read() if process.stderr else ""
+        error_log = ""
+        if raw_logs:
+            error_log += "--- STDOUT ---\n" + "\n".join(raw_logs) + "\n"
+        if err_out:
+            error_log += "--- STDERR ---\n" + err_out
+            
     except Exception as e:
+        error_msg = f"スクレイパーの起動に失敗しました: {str(e)}"
         if status_callback:
-            status_callback(f"スクレイパーの起動に失敗しました: {str(e)}")
-        return []
+            status_callback(error_msg)
+        return [], 0, error_msg
     finally:
         if tmp_file and os.path.exists(tmp_file):
             try:
@@ -95,4 +105,4 @@ def run_scraper(
             except:
                 pass
 
-    return stores, total_count if 'total_count' in locals() else len(stores)
+    return stores, (total_count if 'total_count' in locals() else len(stores)), (error_log if 'error_log' in locals() else "")

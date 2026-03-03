@@ -253,7 +253,7 @@ if search_clicked and area_input:
         seen_urls = history.get_seen_urls() if exclude_history else set()
         
         # 2. スクレイピング実行
-        raw_results, total_found_on_site = run_scraper(
+        raw_results, total_found_on_site, error_log = run_scraper(
             address_query=area_input,
             max_stores=max_stores,
             exclude_chains=exclude_chains,
@@ -314,6 +314,8 @@ if search_clicked and area_input:
     else:
         st.session_state.results = []
         st.error("指定された地域で店舗が見つかりませんでした。別の地域名や詳しい住所を試してみてください。")
+        if error_log:
+            st.error(f"技術的なエラー詳細:\n```text\n{error_log}\n```")
         if os.path.exists("debug_screenshot.png"):
             st.warning("クラウド上でロボットチェックや画面の表示崩れが起きている可能性があります。以下のエラー時の画面を確認してください。")
             st.image("debug_screenshot.png", use_container_width=True)

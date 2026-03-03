@@ -560,6 +560,11 @@ def main():
         
         except Exception as e:
             log(f"エラー: {str(e)}")
+            try:
+                if 'page' in locals() and not page.is_closed():
+                    page.screenshot(path="debug_screenshot.png")
+            except:
+                pass
         finally:
             browser.close()
     
