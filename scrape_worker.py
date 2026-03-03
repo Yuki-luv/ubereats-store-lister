@@ -44,12 +44,13 @@ def cleanup_overlays(page):
             'button:has-text("OK")',
             'button:has-text("同意")',
             'button:has-text("了解")',
+            'button:has-text("閉じる")',
             '[data-testid="accept-button"]',
             '#cookie-banner button',
+            '#onetrust-accept-btn-handler', # よくあるクッキー承諾
             'button[id*="cookie"]',
             'button[aria-label="Close"]',
-            'button[aria-label="閉じる"]',
-            '.bn-close-button', # Uber One バナーなど
+            '.bn-close-button',
             '#web-navigation-delivery-address-picker-close-button',
         ]
         
@@ -568,20 +569,39 @@ def main():
                 # ダイアログが再発している可能性があるので再度掃除
                 cleanup_overlays(page)
                 
-                # 共通入力処理 (JavaScriptによる強制セット + キーボード入力)
-                def nuclear_input(el, query):
+                # 共通入力処理 (React等のステート更新を確実に発火させる)
+                def robust_input(el, query):
                     try:
+                        log(f"入力フィールドにフォーカス中: {query}")
                         el.click(force=True)
-                        page.wait_for_timeout(500)
-                        # JSで強制セット
-                        page.evaluate("(el, val) => { el.value = val; el.dispatchEvent(new Event('input', {bubbles:true})); el.dispatchEvent(new Event('change', {bubbles:true})); }", el, query)
                         page.wait_for_timeout(1000)
-                        # ダメ押しでキーボード入力
-                        page.keyboard.type(query, delay=100)
+                        
+                        # 1. 既存の値を消去
+                        el.fill("")
+                        page.wait_for_timeout(500)
+                        
+                        # 2. insert_text (キーイベントをバイパスして直接注入)
+                        # これがReactなどの複雑なフレームワークで最も確実に値を入れる方法の一つです
+                        page.keyboard.insert_text(query)
+                        page.wait_for_timeout(1000)
+                        
+                        # 3. 入力されたか確認。空なら type でリトライ
+                        val = el.input_value()
+                        if not val or val != query:
+                            log("警告: insert_text が不完全です。通常のタイピングでリトライします。")
+                            el.type(query, delay=100)
+                        
+                        # 4. 最終確認
+                        if not el.input_value():
+                            log("致命的: 入力が反映されません。JavaScriptでの強制上書きを試みます。")
+                            page.evaluate("(el, val) => { el.focus(); el.value = val; el.dispatchEvent(new Event('input', {bubbles:true})); el.dispatchEvent(new Event('change', {bubbles:true})); }", el, query)
+                        
                         return True
-                    except: return False
+                    except Exception as e:
+                        log(f"入力警告: {str(e)}")
+                        return False
 
-                nuclear_input(target_input, address_query)
+                robust_input(target_input, address_query)
                 
                 page.wait_for_timeout(3000) # サジェスト待機
                 page.screenshot(path="debug_step3_typed.png")
