@@ -239,16 +239,16 @@ AREA_SLUG_MAP = {
     "文京区": "bunkyo-tokyo",
     "横浜": "yokohama-kanagawa", "横浜市": "yokohama-kanagawa",
     "川崎": "kawasaki-kanagawa", "川崎市": "kawasaki-kanagawa",
-    "大阪": "osaka-osaka", "大阪市": "osaka-osaka",
-    "名古屋": "nagoya-aichi", "名古屋市": "nagoya-aichi",
-    "福岡": "fukuoka-fukuoka", "福岡市": "fukuoka-fukuoka",
-    "札幌": "sapporo-hokkaido", "札幌市": "sapporo-hokkaido",
-    "仙台": "sendai-miyagi", "仙台市": "sendai-miyagi",
-    "神戸": "kobe-hyogo", "神戸市": "kobe-hyogo",
-    "京都": "kyoto-kyoto", "京都市": "kyoto-kyoto",
-    "広島": "hiroshima-hiroshima", "広島市": "hiroshima-hiroshima",
-    "さいたま": "saitama-saitama", "さいたま市": "saitama-saitama",
-    "千葉": "chiba-chiba", "千葉市": "chiba-chiba",
+    "大阪": "osaka-osaka", "大阪市": "osaka-osaka", "大阪市北区": "osaka-osaka", "大阪市中央区": "osaka-osaka", "大阪市西区": "osaka-osaka", "大阪市浪速区": "osaka-osaka",
+    "名古屋": "nagoya-aichi", "名古屋市": "nagoya-aichi", "中区": "nagoya-aichi", "中村区": "nagoya-aichi",
+    "福岡": "fukuoka-fukuoka", "福岡市": "fukuoka-fukuoka", "博多区": "fukuoka-fukuoka", "中央区": "fukuoka-fukuoka",
+    "札幌": "sapporo-hokkaido", "札幌市": "sapporo-hokkaido", "中央区": "sapporo-hokkaido",
+    "仙台": "sendai-miyagi", "仙台市": "sendai-miyagi", "青葉区": "sendai-miyagi",
+    "神戸": "kobe-hyogo", "神戸市": "kobe-hyogo", "中央区": "kobe-hyogo",
+    "京都": "kyoto-kyoto", "京都市": "kyoto-kyoto", "下京区": "kyoto-kyoto", "中京区": "kyoto-kyoto",
+    "広島": "hiroshima-hiroshima", "広島市": "hiroshima-hiroshima", "中区": "hiroshima-hiroshima",
+    "さいたま": "saitama-saitama", "さいたま市": "saitama-saitama", "大宮区": "saitama-saitama", "浦和区": "saitama-saitama",
+    "千葉": "chiba-chiba", "千葉市": "chiba-chiba", "中央区": "chiba-chiba",
 }
 
 
@@ -450,6 +450,14 @@ def main():
         page = context.new_page()
         Stealth().apply_stealth_sync(page)
         
+        # 検索キーワードに基づいてジオロケーションを調整
+        if "大阪" in address_query:
+            context.set_geolocation({"longitude": 135.5023, "latitude": 34.6937})
+        elif "名古屋" in address_query:
+            context.set_geolocation({"longitude": 136.9066, "latitude": 35.1815})
+        elif "福岡" in address_query:
+            context.set_geolocation({"longitude": 130.4017, "latitude": 33.5904})
+        
         try:
             # --- Step 1: ページアクセス ---
             slug = area_to_slug(address_query)
@@ -490,14 +498,18 @@ def main():
                 input_el = None
                 for sel in [
                     '[data-testid="address-input"]',
-                    '[data-testid="location-input"]',
-                    'input[type="text"]',
+                    '[data-testid="location-typeahead-input"]',
+                    'input[id="location-typeahead-home-input"]',
+                    'input[aria-label*="住所"]',
                     'input[placeholder*="住所"]',
                     'input[placeholder*="Address"]',
+                    'input[type="text"]',
                 ]:
                     try:
-                        input_el = page.wait_for_selector(sel, timeout=5000)
+                        input_el = page.wait_for_selector(sel, timeout=3000)
                         if input_el:
+                            input_el.click()
+                            page.screenshot(path="debug_step2_clicked.png")
                             break
                     except Exception:
                         continue
@@ -515,14 +527,14 @@ def main():
                     page.wait_for_timeout(500)
                     
                     # 文字を入力
-                    input_el.type(address_query, delay=100)
+                    input_el.fill(address_query)
                     page.wait_for_timeout(1000)
                     
-                    # 入力された内容を再確認し、空なら再入力（稀に入力に失敗することがあるため）
+                    # 入力された内容を再確認
                     current_val = input_el.input_value()
                     if not current_val:
                         log("再入力中...")
-                        input_el.type(address_query, delay=150)
+                        input_el.type(address_query, delay=10)
                 
                 page.screenshot(path="debug_step3_typed.png")
                 
