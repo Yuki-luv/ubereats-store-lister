@@ -41,12 +41,12 @@ def cleanup_overlays(page):
     try:
         # 1. セレクタによるクリック
         selectors = [
-            '[data-testid="accept-button"]',
-            '#cookie-banner button',
-            'button[id*="cookie"]',
             'button:has-text("OK")',
             'button:has-text("同意")',
             'button:has-text("了解")',
+            '[data-testid="accept-button"]',
+            '#cookie-banner button',
+            'button[id*="cookie"]',
             'button[aria-label="Close"]',
             'button[aria-label="閉じる"]',
             '.bn-close-button', # Uber One バナーなど
@@ -549,12 +549,13 @@ def main():
                 
                 # 入力フィールドを徹底的に探す
                 selectors = [
+                    '#location-typeahead-home-input',
                     '[data-testid="location-typeahead-home-input"]',
                     '[data-testid="address-input"]',
+                    'input[placeholder*="お届け先"]',
                     'input[placeholder*="住所"]',
                     'input[aria-label*="住所"]',
                     'input[placeholder*="Address"]',
-                    '#location-typeahead-home-input',
                 ]
                 
                 target_input = None
