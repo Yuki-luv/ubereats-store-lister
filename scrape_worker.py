@@ -573,73 +573,48 @@ def main():
                 else:
                     def type_address_and_select(query):
                         log(f"入力を試行中: {query}")
-                        input_el.click()
-                        page.wait_for_timeout(500)
-                        input_el.press("Control+A")
-                        input_el.press("Backspace")
-                        page.wait_for_timeout(500)
-                        
-                        # 1文字ずつ入力（サジェストを発生させるため）
-                        page.keyboard.type(query, delay=150)
-                        page.wait_for_timeout(2500)
-                        
-                        # サジェストが出るか確認
-                        suggestions = page.query_selector_all('[role="option"]')
-                        if suggestions:
-                            log(f"サジェストを検出、最初の項目をクリックします ({len(suggestions)}件)")
-                            suggestions[0].click()
+                        try:
+                            # 1. フィールドをクリア（Control+AはLinuxで不安定なためfillを使う）
+                            input_el.click()
+                            page.wait_for_timeout(500)
+                            input_el.fill("")
+                            page.wait_for_timeout(500)
+                            
+                            # 2. 1文字ずつ入力（サジェストを発生させるため）
+                            page.keyboard.type(query, delay=100)
+                            page.wait_for_timeout(3000)
+                            
+                            # 3. サジェストが出るか確認
+                            for sug_sel in ['[role="option"]', '[data-testid="location-suggestion"]', 'li[role="option"]']:
+                                suggestions = page.query_selector_all(sug_sel)
+                                if suggestions:
+                                    log(f"サジェストを検出 ({len(suggestions)}件)。確定します。")
+                                    suggestions[0].click()
+                                    page.wait_for_timeout(2000)
+                                    return True
+                            
+                            # サジェストが出ない場合、末尾にスペースを入れてみる
+                            page.keyboard.type(" ")
                             page.wait_for_timeout(2000)
-                            return True
-                        
-                        # サジェストが出ない場合、末尾にスペースを入れてみる
-                        page.keyboard.type(" ")
-                        page.wait_for_timeout(2000)
-                        suggestions = page.query_selector_all('[role="option"]')
-                        if suggestions:
-                            suggestions[0].click()
-                            return True
+                            suggestions = page.query_selector_all('[role="option"]')
+                            if suggestions:
+                                suggestions[0].click()
+                                return True
+                        except Exception as e:
+                            log(f"デバッグ: 入力試行中に例外発生: {str(e)}")
                             
                         return False
 
                     success = type_address_and_select(address_query)
-                    
                     if not success and address_query != original_query:
                         log("正規化住所で失敗、元の住所で再試行します...")
                         success = type_address_and_select(original_query)
                 
                 page.screenshot(path="debug_step3_typed.png")
                 
-                # サジェストを待ってクリック
-                suggestion_clicked = False
-                log("サジェストを確認中...")
-                
-                # サジェストが出るまで少し待機を強める
+                # サジェストを待ってクリック（既に行っているが成功フラグを立てる）
+                suggestion_clicked = success
                 page.wait_for_timeout(2000)
-                
-                for _ in range(12): # 最大約12秒待機
-                    for sel in [
-                        '[data-testid="location-suggestion"]',
-                        'ul[role="listbox"] li',
-                        '[role="option"]',
-                        'li[role="option"]',
-                        'div[aria-label*="住所"]',
-                    ]:
-                        try:
-                            suggestions = page.query_selector_all(sel)
-                            if suggestions:
-                                # 最初の有効なサジェストをクリック
-                                for sug in suggestions:
-                                    text = sug.text_content() or ""
-                                    if text.strip():
-                                        sug.click()
-                                        suggestion_clicked = True
-                                        log(f"サジェストを選択しました: {text.strip()[:20]}...")
-                                        break
-                            if suggestion_clicked: break
-                        except Exception:
-                            continue
-                    if suggestion_clicked: break
-                    page.wait_for_timeout(1000)
                 
                 if not suggestion_clicked:
                     log("サジェストが見つかりませんでした。Enterキーを送信します。")
