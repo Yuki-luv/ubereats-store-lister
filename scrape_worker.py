@@ -477,7 +477,12 @@ def main():
                 page.screenshot(path="debug_step1_loaded.png")
                 
                 # クッキー同意ダイアログを閉じる (フォントが豆腐になるため座標やtestid優先)
-                page.wait_for_timeout(2000)
+                page.wait_for_timeout(3000)
+                # 強制的に右下をクリック（Cookie 同意ボタンの一般的な位置）
+                # ユーザーのスクショで右下に [OK] ボタンがあるのを確認
+                page.mouse.click(1150, 750) 
+                page.wait_for_timeout(1000)
+                
                 cookie_handled = False
                 for cookie_sel in [
                     '[data-testid="accept-button"]',
