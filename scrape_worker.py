@@ -33,30 +33,43 @@ def log(msg: str):
 
 def dismiss_cookie_banner(page):
     """クッキー同意ダイアログを閉じる"""
+    cleanup_overlays(page)
+
+
+def cleanup_overlays(page):
+    """プロモーション、クッキー、Uber Oneなどのオーバーレイを掃除する"""
     try:
-        page.wait_for_timeout(2000)
-        # 1. 座標指定クリック（右下のOKボタン付近）- ユーザーのスクショで位置を確認
+        # 1. 座標指定クリック（右下のOKボタン付近）- クッキー用
         page.mouse.click(1150, 750) 
-        page.wait_for_timeout(500)
-        page.mouse.click(1100, 770) # 少しずらして予備クリック
+        page.wait_for_timeout(300)
         
         # 2. セレクタによるクリック
-        for cookie_sel in [
+        selectors = [
             '[data-testid="accept-button"]',
             '#cookie-banner button',
             'button[id*="cookie"]',
             'button:has-text("OK")',
             'button:has-text("同意")',
             'button:has-text("了解")',
-        ]:
+            'button[aria-label="Close"]',
+            'button[aria-label="閉じる"]',
+            '.bn-close-button', # Uber One バナーなど
+            '#web-navigation-delivery-address-picker-close-button',
+        ]
+        
+        for sel in selectors:
             try:
-                btn = page.query_selector(cookie_sel)
-                if btn and btn.is_visible():
-                    btn.click(force=True)
-                    page.wait_for_timeout(1000)
-                    break
+                btns = page.query_selector_all(sel)
+                for btn in btns:
+                    if btn and btn.is_visible():
+                        btn.click(force=True)
+                        page.wait_for_timeout(500)
             except Exception:
                 continue
+        
+        # 3. エスケープキーでダイアログを閉じる試み
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(500)
     except Exception:
         pass
 
@@ -540,6 +553,7 @@ def main():
                 
                 # 入力フィールドを取得
                 input_el = None
+                success = False # 初期化
                 for sel in [
                     '[data-testid="address-input"]',
                     '[data-testid="location-typeahead-input"]',
@@ -562,6 +576,7 @@ def main():
                     log("警告: 入力フィールドが見つかりませんでした。Enterキーによる続行を試みます。")
                     page.keyboard.type(address_query, delay=100)
                     page.keyboard.press("Enter")
+                    success = True # Enterを押したので一応成功とする
                 else:
                     def type_address_and_select(query):
                         log(f"入力を試行中: {query}")
@@ -609,43 +624,46 @@ def main():
                 page.wait_for_timeout(2000)
                 
                 if not suggestion_clicked:
-                    log("サジェストが見つかりませんでした。Enterキーを送信します。")
+                    log("サジェストが未選択です。Enterキーを送信します。")
                     page.keyboard.press("Enter")
                 
-                # サジェスト選択後、またはEnter後の画面遷移を待つ
                 page.wait_for_timeout(3000)
                 
                 # 確定ボタン（今すぐ配達、検索など）
-                # ユーザーのスクショで右側にある黒い「フードを探す」ボタン
                 confirmed = False
-                for confirm_sel in [
-                    '[data-testid="delivery-mode-button"]',
-                    '[data-testid="submit-button"]',
-                    'button[type="submit"]',
-                    'button:has-text("フードを探す")',
-                    'button:has-text("配達")',
-                    'button:has-text("今すぐ")',
-                ]:
-                    try:
-                        btn = page.query_selector(confirm_sel)
-                        if btn and btn.is_visible():
-                            btn.click(force=True)
-                            confirmed = True
-                            page.wait_for_timeout(4000)
-                            break
-                    except Exception:
-                        continue
+                for _ in range(2): # 2回試行
+                    cleanup_overlays(page)
+                    for confirm_sel in [
+                        '[data-testid="delivery-mode-button"]',
+                        '[data-testid="submit-button"]',
+                        'button[type="submit"]',
+                        'button:has-text("フードを探す")',
+                        'button:has-text("配達")',
+                        'button:has-text("今すぐ")',
+                    ]:
+                        try:
+                            # セレクタで見つかる要素全てに対してクリックを試みる（隠れている場合があるため）
+                            btns = page.query_selector_all(confirm_sel)
+                            for btn in btns:
+                                if btn and btn.is_visible():
+                                    btn.click(force=True)
+                                    confirmed = True
+                                    page.wait_for_timeout(4000)
+                                    break
+                            if confirmed: break
+                        except Exception:
+                            continue
+                    if confirmed: break
+                    page.keyboard.press("Enter")
+                    page.wait_for_timeout(3000)
                 
-                if not confirmed:
-                    # 強制的に座標クリック（「フードを探す」ボタンの一般的な位置）
-                    # 1280x800 の viewport で、右側の大きなボタンの座標
-                    log("デバッグ: 座標による検索実行を試みます。")
-                    page.mouse.click(680, 620) # 「フードを探す」ボタン付近 (ユーザーのスクショ比率より)
-                    page.wait_for_timeout(2000)
-                
-                # それでも進まない場合は強引にEnter
-                page.keyboard.press("Enter")
-                page.wait_for_timeout(5000)
+                # --- 追加の安全策: FAQページに飛ばされた場合のリカバリ ---
+                if "uber-one" in page.url or "help" in page.url or "faq" in page.url:
+                    log("警告: FAQ/プロモーションページに飛ばされました。戻ります。")
+                    page.go_back()
+                    page.wait_for_timeout(3000)
+                    page.keyboard.press("Enter")
+                    page.wait_for_timeout(5000)
                 
                 # 店舗リンクが現れるまで最大10秒待機
                 try:
