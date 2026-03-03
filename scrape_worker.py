@@ -476,21 +476,30 @@ def main():
                 page.wait_for_timeout(5000)
                 page.screenshot(path="debug_step1_loaded.png")
                 
-                # クッキー同意ダイアログを閉じる
+                # クッキー同意ダイアログを閉じる (フォントが豆腐になるため座標やtestid優先)
+                page.wait_for_timeout(2000)
+                cookie_handled = False
                 for cookie_sel in [
+                    '[data-testid="accept-button"]',
+                    '#cookie-banner button',
+                    'button[id*="cookie"]',
                     'button:has-text("OK")',
                     'button:has-text("同意")',
-                    'button:has-text("Accept")',
-                    '[data-testid="accept-button"]',
                 ]:
                     try:
                         btn = page.query_selector(cookie_sel)
-                        if btn:
-                            btn.click()
+                        if btn and btn.is_visible():
+                            btn.click(force=True)
+                            cookie_handled = True
                             page.wait_for_timeout(1000)
                             break
                     except Exception:
                         continue
+                
+                # ダイアログが消えない場合の強硬手段（右下のOKボタン付近をクリック）
+                if not cookie_handled:
+                    page.mouse.click(1100, 750) # 画面右下付近
+                    page.wait_for_timeout(1000)
                 
                 log(f"住所「{address_query}」を入力中...")
                 
@@ -577,23 +586,26 @@ def main():
                 # サジェスト選択後、またはEnter後の画面遷移を待つ
                 page.wait_for_timeout(3000)
                 
-                # 「配達時間」や「今すぐ配達」などのモーダル、または配達ボタンが出る場合
+                # 確定ボタン（今すぐ配達、検索など）
                 for confirm_sel in [
-                    'button[data-testid="delivery-mode-button"]',
+                    '[data-testid="delivery-mode-button"]',
+                    '[data-testid="submit-button"]',
+                    'button[type="submit"]',
                     'button:has-text("配達")',
-                    'button:has-text("今すぐ配達")',
-                    'button:has-text("検索")',
-                    'button:has-text("Done")',
-                    'form button[type="submit"]',
+                    'button:has-text("今すぐ")',
                 ]:
                     try:
                         btn = page.query_selector(confirm_sel)
                         if btn and btn.is_visible():
-                            btn.click()
-                            page.wait_for_timeout(2000)
+                            btn.click(force=True)
+                            page.wait_for_timeout(4000)
                             break
                     except Exception:
                         continue
+                
+                # それでも進まない場合は強引にEnter
+                page.keyboard.press("Enter")
+                page.wait_for_timeout(5000)
                 
                 # 店舗リンクが現れるまで最大20秒待機
                 try:
