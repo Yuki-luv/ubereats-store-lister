@@ -572,6 +572,11 @@ def main():
                             break
                     except: continue
 
+                if target_input:
+                    # 完全に先頭へスクロール
+                    page.evaluate("window.scrollTo(0, 0)")
+                    page.wait_for_timeout(1000)
+                    
                     # 共通入力処理 (JavaScriptによる強制セット + キーボード入力)
                     def nuclear_input(el, query):
                         try:
@@ -603,13 +608,11 @@ def main():
                     
                     if not suggestion_selected:
                         log("候補が出ませんでした。中心座標クリック + Enterで強行します。")
-                        # 画面中央やや下（入力欄の下あたり）を適当にクリックして候補を無理やり選ぶ試み
                         page.mouse.click(400, 500)
                         page.wait_for_timeout(1000)
                         page.keyboard.press("Enter")
                 else:
                     log("エラー: 入力欄が見つかりません。盲目的入力を試みます。")
-                    # 1280x800 での一般的な入力欄位置をクリック
                     page.mouse.click(400, 620)
                     page.wait_for_timeout(500)
                     page.keyboard.type(address_query)
