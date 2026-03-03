@@ -318,9 +318,22 @@ if search_clicked and area_input:
         st.error("指定された地域で店舗が見つかりませんでした。別の地域名や詳しい住所を試してみてください。")
         if error_log:
             st.error(f"技術的なエラー詳細:\n```text\n{error_log}\n```")
-        if os.path.exists("debug_screenshot.png"):
-            st.warning("クラウド上でロボットチェックや画面の表示崩れが起きている可能性があります。以下のエラー時の画面を確認してください。")
-            st.image("debug_screenshot.png", use_container_width=True)
+        # ステップごとのデバッグスクリーンショットを表示
+        debug_shots = [
+            ("debug_step1_loaded.png", "Step1: ページ読み込み後"),
+            ("debug_step2_clicked.png", "Step2: クリック後"),
+            ("debug_step3_typed.png", "Step3: 住所入力後"),
+            ("debug_step4_result.png", "Step4: 結果表示後"),
+            ("debug_screenshot.png", "エラー時の画面"),
+        ]
+        shown_any = False
+        for fname, label in debug_shots:
+            if os.path.exists(fname):
+                if not shown_any:
+                    st.warning("デバッグスクリーンショット（各ステップの状態）:")
+                    shown_any = True
+                st.caption(label)
+                st.image(fname, use_container_width=True)
 
 
 # ───────────────────────────────────────────
