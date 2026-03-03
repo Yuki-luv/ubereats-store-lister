@@ -489,6 +489,41 @@ def main():
             context.set_geolocation({"longitude": 130.4017, "latitude": 33.5904})
         
         try:
+            # --- Step 0: 住所の正規化（精度の向上） ---
+            # 「大阪市北区」などの場合に「大阪府」を補完することでヒット率を上げる
+            original_query = address_query.strip()
+            if original_query.startswith(("大阪市", "堺市", "豊中市", "吹田市", "枚方市")):
+                normalized_query = "大阪府" + original_query
+            elif original_query.startswith(("京都市", "宇治市")):
+                normalized_query = "京都府" + original_query
+            elif original_query.startswith(("名古屋市", "豊田市")):
+                normalized_query = "愛知県" + original_query
+            elif original_query.startswith(("福岡市", "北九州市")):
+                normalized_query = "福岡県" + original_query
+            elif original_query.startswith(("横浜市", "川崎市", "相模原市")):
+                normalized_query = "神奈川県" + original_query
+            elif original_query.startswith(("さいたま市", "川口市")):
+                normalized_query = "埼玉県" + original_query
+            elif original_query.startswith(("千葉市", "船橋市")):
+                normalized_query = "千葉県" + original_query
+            elif original_query.startswith(("札幌市")):
+                normalized_query = "北海道" + original_query
+            elif original_query.startswith(("広島市")):
+                normalized_query = "広島県" + original_query
+            elif original_query.startswith(("仙台市")):
+                normalized_query = "宮城県" + original_query
+            elif original_query.startswith(("23区", "港区", "新宿区", "渋谷区", "中央区", "千代田区")):
+                # 既に府や都がついている場合はそのまま、なければ東京都
+                if "都" not in original_query and "府" not in original_query:
+                    normalized_query = "東京都" + original_query
+                else:
+                    normalized_query = original_query
+            else:
+                normalized_query = original_query
+            
+            log(f"住所を正規化しました: {original_query} -> {normalized_query}")
+            address_query = normalized_query
+
             # --- Step 1: ページアクセス ---
             address_query = address_query.strip()
             slug = area_to_slug(address_query)
@@ -548,22 +583,30 @@ def main():
                     page.keyboard.type(address_query, delay=100)
                     page.keyboard.press("Enter")
                 else:
-                    # 入力欄をクリアにする（既存の値を全選択して削除）
-                    input_el.click()
-                    page.wait_for_timeout(500)
-                    page.keyboard.press("Control+A")
-                    page.keyboard.press("Backspace")
-                    page.wait_for_timeout(500)
+                    def type_address(query):
+                        input_el.click()
+                        page.wait_for_timeout(500)
+                        page.keyboard.press("Control+A")
+                        page.keyboard.press("Backspace")
+                        page.wait_for_timeout(500)
+                        input_el.fill(query)
+                        page.wait_for_timeout(1000)
+                        return input_el.input_value()
+
+                    current_val = type_address(address_query)
                     
-                    # 文字を入力
-                    input_el.fill(address_query)
-                    page.wait_for_timeout(1000)
-                    
-                    # 入力された内容を再確認
-                    current_val = input_el.input_value()
-                    if not current_val:
-                        log("再入力中...")
-                        input_el.type(address_query, delay=10)
+                    # 「住所が見つかりませんでした」エラーのチェック
+                    # ユーザーのスクショで確認した文字列
+                    error_check_text = "住所が見つかりませんでした"
+                    if error_check_text in page.content():
+                        log(f"警告: '{address_query}' が見つかりません。フォールバックを試みます。")
+                        # 「府」や「市」を削ってみるなどのリトライ（または元のクエリ）
+                        if address_query != original_query:
+                            type_address(original_query)
+                        else:
+                            # 最後の手段としてスペースを入れて再入力させ、サジェストを促す
+                            input_el.type(" ")
+                            page.wait_for_timeout(1000)
                 
                 page.screenshot(path="debug_step3_typed.png")
                 
@@ -607,10 +650,13 @@ def main():
                 page.wait_for_timeout(3000)
                 
                 # 確定ボタン（今すぐ配達、検索など）
+                # ユーザーのスクショで右側にある黒い「フードを探す」ボタン
+                confirmed = False
                 for confirm_sel in [
                     '[data-testid="delivery-mode-button"]',
                     '[data-testid="submit-button"]',
                     'button[type="submit"]',
+                    'button:has-text("フードを探す")',
                     'button:has-text("配達")',
                     'button:has-text("今すぐ")',
                 ]:
@@ -618,10 +664,18 @@ def main():
                         btn = page.query_selector(confirm_sel)
                         if btn and btn.is_visible():
                             btn.click(force=True)
+                            confirmed = True
                             page.wait_for_timeout(4000)
                             break
                     except Exception:
                         continue
+                
+                if not confirmed:
+                    # 強制的に座標クリック（「フードを探す」ボタンの一般的な位置）
+                    # 1280x800 の viewport で、右側の大きなボタンの座標
+                    log("デバッグ: 座標による検索実行を試みます。")
+                    page.mouse.click(680, 620) # 「フードを探す」ボタン付近 (ユーザーのスクショ比率より)
+                    page.wait_for_timeout(2000)
                 
                 # それでも進まない場合は強引にEnter
                 page.keyboard.press("Enter")
