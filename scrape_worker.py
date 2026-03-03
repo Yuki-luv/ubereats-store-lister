@@ -23,7 +23,9 @@ if sys.stdout.encoding != 'utf-8':
 
 
 BASE_URL = "https://www.ubereats.com"
-FEED_URL = f"{BASE_URL}/jp/feed"
+# 言語と地域を明示的に指定
+JAPAN_PARAMS = "?p_lang=ja&dl=true"
+FEED_URL = f"{BASE_URL}/jp/feed{JAPAN_PARAMS}"
 
 
 def log(msg: str):
@@ -510,9 +512,9 @@ def main():
             if city_match:
                 simplified_query = city_match.group(1)
             
-            # 最初は「〇〇市」のようにシンプルに入力（日本 などの接頭辞は候補を絞りすぎる場合があるため）
-            address_query = simplified_query
-            log(f"住所をクラウド向けに簡略化しました: {original_query} -> {address_query}")
+            # 日本の住所であることを強調するため「日本」を再度追加、ただし入力時は候補から選ぶ
+            address_query = f"日本 {simplified_query}"
+            log(f"住所を日本限定に設定しました: {original_query} -> {address_query}")
 
             # --- Step 1: ページアクセス ---
             address_query = address_query.strip()
@@ -523,12 +525,11 @@ def main():
             use_city_page = bool(slug) and max_stores <= 25
             log(f"デバッグ: use_city_page={use_city_page}")
             
-            # 検索開始ページの決定
             if use_city_page:
-                start_url = f"{BASE_URL}/jp/city/{slug}"
+                start_url = f"{BASE_URL}/jp/city/{slug}{JAPAN_PARAMS}"
                 log(f"都市ページから開始します: {slug}")
             else:
-                start_url = f"{BASE_URL}/jp"
+                start_url = f"{BASE_URL}/jp{JAPAN_PARAMS}"
                 log("ホーム画面から開始します")
             
             page.goto(start_url, wait_until="networkidle", timeout=45000)
