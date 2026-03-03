@@ -490,27 +490,19 @@ def main():
         
         try:
             # --- Step 0: 住所の正規化（精度の向上） ---
-            # WEB環境（特にクラウド）では、国名や府名を付けないとヒットしない場合があります。
             original_query = address_query.strip()
-            # 「日本 〇〇府 〇〇市...」という形式を試みる
-            normalized_query = original_query
-            if not original_query.startswith("日本"):
-                if original_query.startswith(("大阪市", "堺市", "豊中市", "吹田市", "枚方市", "大阪府")):
-                    if not original_query.startswith("大阪府"):
-                        normalized_query = "日本 大阪府" + original_query
-                    else:
-                        normalized_query = "日本 " + original_query
-                elif original_query.startswith(("東京都", "23区", "港区", "新宿区", "渋谷区", "中央区", "千代田区")):
-                    if not original_query.startswith("東京都"):
-                        normalized_query = "日本 東京都" + original_query
-                    else:
-                        normalized_query = "日本 " + original_query
-                else:
-                    # 汎用的に「日本 」を付けてみる
-                    normalized_query = "日本 " + original_query
             
-            log(f"住所を正規化しました: {original_query} -> {normalized_query}")
-            address_query = normalized_query
+            # --- WEB環境（クラウド）向けのヒューリスティック ---
+            # 市名や区名だけを入力することで、広域検索として認識させやすくする
+            simplified_query = original_query
+            # 住所から「〇〇市」や「〇〇区」を抽出
+            city_match = re.search(r'([^都道府県]+?[市区町村])', original_query)
+            if city_match:
+                simplified_query = city_match.group(1)
+            
+            # 最初は「日本 〇〇市」のように入力して候補を出やすくする
+            address_query = f"日本 {simplified_query}"
+            log(f"住所をクラウド向けに簡略化しました: {original_query} -> {address_query}")
 
             # --- Step 1: ページアクセス ---
             address_query = address_query.strip()
