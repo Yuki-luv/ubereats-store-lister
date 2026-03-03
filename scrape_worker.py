@@ -443,43 +443,55 @@ def main():
                 # フィードページで住所を入力して検索（無限スクロール可能）
                 log("Uber Eats Japan にアクセス中...")
                 page.goto(FEED_URL, wait_until="domcontentloaded", timeout=30000)
-                page.wait_for_timeout(3000)
+                page.wait_for_timeout(5000)
                 
                 log(f"住所「{address_query}」を入力中...")
-                # JavaScript で住所を入力
-                page.evaluate("""
-                    (query) => {
-                        const inputs = document.querySelectorAll('input[type="text"]');
-                        for (const input of inputs) {
-                            const nativeSetter = Object.getOwnPropertyDescriptor(
-                                window.HTMLInputElement.prototype, 'value'
-                            ).set;
-                            if (nativeSetter) {
-                                nativeSetter.call(input, query);
-                                input.dispatchEvent(new Event('input', { bubbles: true }));
-                                input.dispatchEvent(new Event('change', { bubbles: true }));
-                            } else {
-                                input.value = query;
-                            }
-                            break;
-                        }
-                    }
-                """, address_query)
-                page.wait_for_timeout(2500)
                 
-                # 候補を選択
+                # ページ上の入力フィールドを探してクリック → キーボード入力
+                input_clicked = False
                 for sel in [
-                    '[data-testid="location-suggestion"]',
-                    'ul[role="listbox"] li',
+                    'input[type="text"]',
+                    'input[placeholder*="住所"]',
+                    'input[placeholder*="address"]',
+                    '[data-testid="location-input"]',
                 ]:
-                    suggestion = page.query_selector(sel)
-                    if suggestion:
-                        suggestion.click()
-                        page.wait_for_timeout(4000)
+                    el = page.query_selector(sel)
+                    if el:
+                        el.click()
+                        page.wait_for_timeout(1000)
+                        el.fill("")
+                        el.type(address_query, delay=80)
+                        input_clicked = True
                         break
                 
-                # スクロールするために少し待つ
-                page.wait_for_timeout(2000)
+                if not input_clicked:
+                    # フォールバック: フォーカス可能な最初のinputをクリック
+                    page.keyboard.press("Tab")
+                    page.keyboard.type(address_query, delay=80)
+                
+                # サジェストが出るまで待機（最大8秒）
+                suggestion_appeared = False
+                for _ in range(8):
+                    page.wait_for_timeout(1000)
+                    for sel in [
+                        '[data-testid="location-suggestion"]',
+                        'ul[role="listbox"] li',
+                        '[role="option"]',
+                    ]:
+                        suggestion = page.query_selector(sel)
+                        if suggestion:
+                            suggestion.click()
+                            suggestion_appeared = True
+                            break
+                    if suggestion_appeared:
+                        break
+                
+                if not suggestion_appeared:
+                    # サジェストがなければEnterで検索
+                    page.keyboard.press("Enter")
+                
+                # 店舗リストが読み込まれるまで待機
+                page.wait_for_timeout(5000)
             
             # --- Step 2: 店舗リンクを収集 ---
             log(f"店舗リストを収集中... (目標: {max_stores}件{'、大手チェーン除外' if exclude_chains else ''})")
