@@ -23,9 +23,15 @@ if sys.stdout.encoding != 'utf-8':
 
 
 BASE_URL = "https://www.ubereats.com"
-# 言語と地域を明示的に指定
-JAPAN_PARAMS = "?p_lang=ja&dl=true"
-FEED_URL = f"{BASE_URL}/jp/feed{JAPAN_PARAMS}"
+# 言語と地域を明示的に指定（日本国内に固定するためのパラメータ）
+JAPAN_PARAMS = "p_lang=ja&dl=true"
+# 都道府県ごとの代表的な座標（海外からのアクセス時に日本国内を優先させるため）
+CITY_COORDINATES = {
+    "osaka": {"lat": 34.6937, "lng": 135.5023},
+    "tokyo": {"lat": 35.6895, "lng": 139.6917},
+    "nagoya": {"lat": 35.1815, "lng": 136.9066},
+    "fukuoka": {"lat": 33.5904, "lng": 130.4017},
+}
 
 
 def log(msg: str):
@@ -525,11 +531,23 @@ def main():
             use_city_page = bool(slug) and max_stores <= 25
             log(f"デバッグ: use_city_page={use_city_page}")
             
+            # 座標パラメータの構築
+            coord_params = ""
+            for city_key, coords in CITY_COORDINATES.items():
+                if city_key in slug:
+                    coord_params = f"&p_lat={coords['lat']}&p_lng={coords['lng']}"
+                    break
+            if not coord_params and "大阪" in address_query:
+                coords = CITY_COORDINATES["osaka"]
+                coord_params = f"&p_lat={coords['lat']}&p_lng={coords['lng']}"
+            
+            full_params = f"?{JAPAN_PARAMS}{coord_params}"
+
             if use_city_page:
-                start_url = f"{BASE_URL}/jp/city/{slug}{JAPAN_PARAMS}"
+                start_url = f"{BASE_URL}/jp/city/{slug}{full_params}"
                 log(f"都市ページから開始します: {slug}")
             else:
-                start_url = f"{BASE_URL}/jp{JAPAN_PARAMS}"
+                start_url = f"{BASE_URL}/jp{full_params}"
                 log("ホーム画面から開始します")
             
             page.goto(start_url, wait_until="networkidle", timeout=45000)
@@ -613,17 +631,27 @@ def main():
                         page.wait_for_timeout(2000)
                         page.screenshot(path="debug_step3_typed.png")
                         
-                        # サジェストを選択
+                        # サジェストを選択（日本国内のものを優先）
                         for sug_sel in ['[role="option"]', '[data-testid="location-suggestion"]', 'li[role="option"]']:
                             suggestions = page.query_selector_all(sug_sel)
                             if suggestions:
-                                log(f"候補リストを確認: {len(suggestions)}件。最初の候補を選択します。")
-                                try:
-                                    suggestions[0].click()
-                                    page.wait_for_timeout(2000)
-                                    suggestion_selected = True
-                                    break
-                                except: continue
+                                for sug in suggestions:
+                                    sug_text = sug.text_content().lower()
+                                    # 日本の候補か、日本語が含まれているか、または単に最初の候補（厳格化しすぎると全滅するため）
+                                    if "日本" in sug_text or "japan" in sug_text or any('\u3040' <= c <= '\u30ff' for c in sug_text):
+                                        log(f"日本の候補を選択します: {sug_text}")
+                                        try:
+                                            sug.click()
+                                            page.wait_for_timeout(2000)
+                                            suggestion_selected = True
+                                            break
+                                        except: continue
+                            if suggestion_selected: break
+                        if not suggestion_selected and suggestions:
+                            # フィルタで誰も残らなかったら、仕方なく最初の候補をクリック
+                            log("日本の候補が特定できません。最初の候補を強制クリックします。")
+                            suggestions[0].click()
+                            suggestion_selected = True
                         if suggestion_selected: break
                     if suggestion_selected: break
                     log(f"「{variation}」では候補が出ませんでした。次のパターンを試します。")
