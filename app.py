@@ -233,6 +233,12 @@ with col_btn:
 if search_clicked and area_input:
     st.session_state.search_query = area_input
     
+    if os.path.exists("debug_screenshot.png"):
+        try:
+            os.remove("debug_screenshot.png")
+        except:
+            pass
+            
     progress_bar = st.progress(0, text="準備中...")
     status_text = st.empty()
     
@@ -308,6 +314,9 @@ if search_clicked and area_input:
     else:
         st.session_state.results = []
         st.error("指定された地域で店舗が見つかりませんでした。別の地域名や詳しい住所を試してみてください。")
+        if os.path.exists("debug_screenshot.png"):
+            st.warning("クラウド上でロボットチェックや画面の表示崩れが起きている可能性があります。以下のエラー時の画面を確認してください。")
+            st.image("debug_screenshot.png", use_container_width=True)
 
 
 # ───────────────────────────────────────────

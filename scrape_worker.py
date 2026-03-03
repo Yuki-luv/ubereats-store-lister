@@ -12,6 +12,7 @@ import time
 import os
 from typing import Optional
 from playwright.sync_api import sync_playwright
+from playwright_stealth import stealth_sync
 
 # Windows環境でのリダイレクト時に文字化けを防ぐため、UTF-8固定にする
 if sys.stdout.encoding != 'utf-8':
@@ -419,9 +420,13 @@ def main():
         context = browser.new_context(
             viewport={"width": 1280, "height": 800},
             locale="ja-JP",
+            timezone_id="Asia/Tokyo",
+            geolocation={"longitude": 139.6917, "latitude": 35.6895},
+            permissions=["geolocation"],
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         )
         page = context.new_page()
+        stealth_sync(page)
         
         try:
             # --- Step 1: ページアクセス ---
@@ -506,6 +511,7 @@ def main():
             store_links = collect_store_links(page, max_stores, exclude_chains, exclude_file)
             
             if not store_links:
+                page.screenshot(path="debug_screenshot.png")
                 log("店舗が見つかりませんでした。別の地域名をお試しください。")
                 emit_result([], total_count=0)
                 browser.close()
