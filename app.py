@@ -16,13 +16,17 @@ import streamlit.components.v1 as components
 import streamlit as st
 import os
 import sys
+import subprocess
 
-# オンライン環境でPlaywrightのブラウザをインストールさせる
-if os.environ.get("STREAMLIT_SERVER_PORT"):
-    os.system(f"{sys.executable} -m playwright install chromium")
-# オンライン環境の時だけ、ブラウザ本体を強制的にインストールする
-if os.environ.get("STREAMLIT_SERVER_PORT"):
-    os.system("playwright install chromium")
+# Playwrightのブラウザが存在しない場合は自動インストールする（クラウド環境対応）
+try:
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as _p:
+        _browser_path = _p.chromium.executable_path
+    if not os.path.exists(_browser_path):
+        subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=False)
+except Exception:
+    subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=False)
 
 # --- 認証機能：これより上に追加 ---
 def check_password():
