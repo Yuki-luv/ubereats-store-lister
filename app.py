@@ -18,15 +18,13 @@ import os
 import sys
 import subprocess
 
-# Playwrightのブラウザが存在しない場合は自動インストールする（クラウド環境対応）
-try:
-    from playwright.sync_api import sync_playwright
-    with sync_playwright() as _p:
-        _browser_path = _p.chromium.executable_path
-    if not os.path.exists(_browser_path):
-        subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=False)
-except Exception:
-    subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=False)
+# クラウド環境でPlaywrightブラウザを確実にインストールする
+# （毎回実行するが、すでにインストール済みなら数秒で完了する）
+subprocess.run(
+    [sys.executable, "-m", "playwright", "install", "chromium"],
+    check=False,
+    capture_output=True
+)
 
 # --- 認証機能：これより上に追加 ---
 def check_password():
