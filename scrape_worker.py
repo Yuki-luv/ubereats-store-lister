@@ -522,90 +522,107 @@ def main():
             use_city_page = bool(slug) and max_stores <= 25
             log(f"デバッグ: use_city_page={use_city_page}")
             
+            # 検索開始ページの決定
             if use_city_page:
-                log(f"都市ページにアクセス中... ({slug})")
-                page.goto(f"{BASE_URL}/jp/city/{slug}", wait_until="domcontentloaded", timeout=30000)
-                page.wait_for_timeout(5000)
-                page.screenshot(path="debug_step1_loaded.png")
-                
-                # クッキー同意ダイアログを閉じる
-                dismiss_cookie_banner(page)
-                
-                # シティページでは店舗を表示させるためにスクロールが必要な場合がある
-                page.evaluate("window.scrollBy(0, 500)")
-                page.wait_for_timeout(2000)
-                
+                start_url = f"{BASE_URL}/jp/city/{slug}"
+                log(f"都市ページから開始します: {slug}")
             else:
-                # フィードよりトップページの方が住所入力欄が確実に出る場合がある
-                page.goto(f"{BASE_URL}/jp", wait_until="networkidle", timeout=45000)
-                page.wait_for_timeout(3000)
-                page.screenshot(path="debug_step1_loaded.png")
-                
-                # ダイアログを掃除（何度か呼ぶ）
-                cleanup_overlays(page)
+                start_url = f"{BASE_URL}/jp"
+                log("ホーム画面から開始します")
+            
+            page.goto(start_url, wait_until="networkidle", timeout=45000)
+            page.wait_for_timeout(3000)
+            page.screenshot(path="debug_step1_loaded.png")
+            
+            # ダイアログを掃除（何度か呼ぶ）
+            cleanup_overlays(page)
+            page.wait_for_timeout(1000)
+            
+            log(f"住所「{address_query}」を精密入力中...")
+            
+            # 入力フィールドを徹底的に探す
+            selectors = [
+                '#location-typeahead-home-input',
+                '[data-testid="location-typeahead-home-input"]',
+                '[data-testid="address-input"]',
+                'input[placeholder*="お届け先"]',
+                'input[placeholder*="住所"]',
+                'input[aria-label*="住所"]',
+                'input[placeholder*="Address"]',
+            ]
+            
+            target_input = None
+            for sel in selectors:
+                try:
+                    target_input = page.wait_for_selector(sel, timeout=3000)
+                    if target_input and target_input.is_visible():
+                        log(f"入力フィールドを特定: {sel}")
+                        break
+                except: continue
+
+            if target_input:
+                # 完全に先頭へスクロール
+                page.evaluate("window.scrollTo(0, 0)")
                 page.wait_for_timeout(1000)
                 
-                log(f"住所「{address_query}」を精密入力中...")
+                # ダイアログが再発している可能性があるので再度掃除
+                cleanup_overlays(page)
                 
-                # 入力フィールドを徹底的に探す
-                selectors = [
-                    '#location-typeahead-home-input',
-                    '[data-testid="location-typeahead-home-input"]',
-                    '[data-testid="address-input"]',
-                    'input[placeholder*="お届け先"]',
-                    'input[placeholder*="住所"]',
-                    'input[aria-label*="住所"]',
-                    'input[placeholder*="Address"]',
-                ]
-                
-                target_input = None
-                for sel in selectors:
+                # 共通入力処理 (JavaScriptによる強制セット + キーボード入力)
+                def nuclear_input(el, query):
                     try:
-                        target_input = page.wait_for_selector(sel, timeout=3000)
-                        if target_input and target_input.is_visible():
-                            log(f"入力フィールドを特定: {sel}")
-                            break
-                    except: continue
+                        el.click(force=True)
+                        page.wait_for_timeout(500)
+                        # JSで強制セット
+                        page.evaluate("(el, val) => { el.value = val; el.dispatchEvent(new Event('input', {bubbles:true})); el.dispatchEvent(new Event('change', {bubbles:true})); }", el, query)
+                        page.wait_for_timeout(1000)
+                        # ダメ押しでキーボード入力
+                        page.keyboard.type(query, delay=100)
+                        return True
+                    except: return False
 
-                if target_input:
-                    # 完全に先頭へスクロール
-                    page.evaluate("window.scrollTo(0, 0)")
-                    page.wait_for_timeout(1000)
-                    
-                    # 共通入力処理 (JavaScriptによる強制セット + キーボード入力)
-                    def nuclear_input(el, query):
-                        try:
-                            el.click()
-                            page.wait_for_timeout(500)
-                            # JSで強制セット（イベントも着火）
-                            page.evaluate("(el, val) => { el.value = val; el.dispatchEvent(new Event('input', {bubbles:true})); }", el, query)
-                            page.wait_for_timeout(500)
-                            # ダメ押しでキーボード入力
-                            page.keyboard.type(query, delay=100)
-                            return True
-                        except: return False
-
-                    nuclear_input(target_input, address_query)
-                    
-                    page.wait_for_timeout(3000) # サジェスト待機
-                    page.screenshot(path="debug_step3_typed.png")
-                    
-                    # サジェストを選択
-                    suggestion_selected = False
-                    for sug_sel in ['[role="option"]', '[data-testid="location-suggestion"]', 'li[role="option"]']:
-                        suggestions = page.query_selector_all(sug_sel)
-                        if suggestions:
-                            log(f"候補リストを確認: {len(suggestions)}件。最初の候補を選択します。")
-                            suggestions[0].click()
-                            page.wait_for_timeout(2000)
-                            suggestion_selected = True
-                            break
-                    
-                else:
-                    log("エラー: 入力欄が見つかりません。Enterキーを送信します。")
-                    page.keyboard.press("Enter")
+                nuclear_input(target_input, address_query)
                 
-                page.wait_for_timeout(5000)
+                page.wait_for_timeout(3000) # サジェスト待機
+                page.screenshot(path="debug_step3_typed.png")
+                
+                # サジェストを選択
+                suggestion_selected = False
+                for sug_sel in ['[role="option"]', '[data-testid="location-suggestion"]', 'li[role="option"]']:
+                    suggestions = page.query_selector_all(sug_sel)
+                    if suggestions:
+                        log(f"候補リストを確認: {len(suggestions)}件。最初の候補を選択します。")
+                        suggestions[0].click()
+                        page.wait_for_timeout(2000)
+                        suggestion_selected = True
+                        break
+                
+                if not suggestion_selected:
+                    log("候補が出ませんでした。Enterキーを送信します。")
+                    page.keyboard.press("Enter")
+            else:
+                log("エラー: 入力欄が見つかりません。")
+                page.keyboard.press("Enter")
+            
+            page.wait_for_timeout(5000)
+            
+            # 検索ボタンを明示的にクリック（Enterで飛ばない場合用）
+            try:
+                search_btn_selectors = [
+                    'button:has-text("フードを探す")',
+                    'button:has-text("Find Food")',
+                    '[data-testid="search-button"]',
+                    'button[type="submit"]'
+                ]
+                for s_sel in search_btn_selectors:
+                    btn = page.query_selector(s_sel)
+                    if btn and btn.is_visible():
+                        log(f"検索ボタンをクリック: {s_sel}")
+                        btn.click()
+                        page.wait_for_timeout(3000)
+                        break
+            except:
+                pass
                 
                 # --- 追加: FAQに飛ばされた場合の緊急脱出 ---
                 if "help" in page.url or "faq" in page.url or "uber-one" in page.url:
