@@ -194,10 +194,12 @@ def detect_address_issues(raw_address: str, normalized_address: str) -> str:
     
     issues = []
     
-    # 英字が多い場合の警告
-    alpha_count = sum(1 for c in raw_address if c.isascii() and c.isalpha())
-    total_count = len(raw_address.replace(' ', ''))
-    if total_count > 0 and alpha_count / total_count > 0.5:
-        issues.append("⚠ 英字多め")
+    # レビュー数や評価などの誤認チェック
+    if re.search(r'\(\d+\+?\)', raw_address) or re.search(r'^\d\.\d', raw_address):
+        issues.append("⚠ レビュー数混入の疑い")
     
+    # 極端に短い住所
+    if len(normalized_address) < 5 and normalized_address:
+        issues.append("⚠ 住所不足の疑い")
+
     return " / ".join(issues) if issues else ""

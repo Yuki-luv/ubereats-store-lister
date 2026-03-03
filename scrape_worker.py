@@ -335,20 +335,42 @@ def collect_store_links(page, max_stores: int, exclude_chains: bool = False, exc
                     
                     // ジャンル情報を抽出
                     let genre = '';
-                    const allText = a.textContent || '';
-                    // Uber Eatsのリスト画面では、ジャンルや評価が「•」や「・」で区切られている
-                    const textParts = allText.split(/[•・]/);
-                    if (textParts.length > 1) {
-                        genre = textParts.filter(p => {
-                            const t = p.trim();
-                            return t && t.length > 1 && t.length < 20 
-                                && !t.match(/^[\\d. ()+]+$/) 
-                                && !t.includes('¥') 
-                                && !t.includes('分')
-                                && !t.includes('km')
-                                && t !== name;
-                        }).map(p => p.trim()).join(' / ');
+                    // aタグ内のすべてのテキストを取得し、改行や記号で分割
+                    const allText = a.innerText || a.textContent || '';
+                    
+                    // 評価、時間、手数料などのキーワード
+                    const junkPatterns = [/分/, /km/, /¥/, /★/, /☆/, /評価/, /配達/, /手数料/, /無料/];
+                    
+                    // ジャンルが含まれそうな断片を抽出
+                    // 1. セパレーターによる分割
+                    const textChunks = allText.split(/[\\n•・·⋅|]/);
+                    const genreCandidates = [];
+                    
+                    for (let p of textChunks) {
+                        let t = p.trim();
+                        // 条件: 短い、数字のみではない、特定キーワードを含まない、店舗名と一致しない
+                        if (t.length > 1 && t.length < 25 && 
+                            !t.match(/^[0-9. ()+]+$/) && 
+                            !junkPatterns.some(reg => reg.test(t)) &&
+                            t !== name) {
+                            genreCandidates.push(t);
+                        }
                     }
+                    
+                    // 2. data-testid="store-card-metadata" 等の特定の要素があれば優先的にチェック
+                    const meta = a.querySelector('[data-testid="store-card-metadata"]');
+                    if (meta) {
+                        const metaText = meta.innerText || '';
+                        const metaParts = metaText.split(/[\\n•・·⋅|]/);
+                        for (let p of metaParts) {
+                            let t = p.trim();
+                            if (t.length > 1 && t.length < 25 && !t.match(/^[0-9. ()+]+$/) && !junkPatterns.some(reg => reg.test(t)) && t !== name) {
+                                if (!genreCandidates.includes(t)) genreCandidates.push(t);
+                            }
+                        }
+                    }
+
+                    genre = genreCandidates.join(' / ');
                     
                     links.push({
                         name: name.substring(0, 80),
@@ -464,70 +486,99 @@ def main():
                 
                 log(f"住所「{address_query}」を入力中...")
                 
-                # 入力フィールドをクリック
+                # 入力フィールドを取得
+                input_el = None
                 for sel in [
                     '[data-testid="address-input"]',
                     '[data-testid="location-input"]',
                     'input[type="text"]',
-                    'input[placeholder]',
+                    'input[placeholder*="住所"]',
+                    'input[placeholder*="Address"]',
                 ]:
                     try:
-                        el = page.wait_for_selector(sel, timeout=3000)
-                        if el:
-                            el.click()
-                            page.wait_for_timeout(1000)
+                        input_el = page.wait_for_selector(sel, timeout=5000)
+                        if input_el:
                             break
                     except Exception:
                         continue
                 
-                page.screenshot(path="debug_step2_clicked.png")
-                
-                # 文字を入力
-                try:
+                if not input_el:
+                    log("警告: 入力フィールドが見つかりませんでした。Enterキーによる続行を試みます。")
                     page.keyboard.type(address_query, delay=100)
-                except Exception:
-                    pass
+                    page.keyboard.press("Enter")
+                else:
+                    # 入力欄をクリアにする（既存の値を全選択して削除）
+                    input_el.click()
+                    page.wait_for_timeout(500)
+                    page.keyboard.press("Control+A")
+                    page.keyboard.press("Backspace")
+                    page.wait_for_timeout(500)
+                    
+                    # 文字を入力
+                    input_el.type(address_query, delay=100)
+                    page.wait_for_timeout(1000)
+                    
+                    # 入力された内容を再確認し、空なら再入力（稀に入力に失敗することがあるため）
+                    current_val = input_el.input_value()
+                    if not current_val:
+                        log("再入力中...")
+                        input_el.type(address_query, delay=150)
                 
-                page.wait_for_timeout(3000)
                 page.screenshot(path="debug_step3_typed.png")
                 
-                # サジェストを最大10秒待ってクリック
+                # サジェストを待ってクリック
                 suggestion_clicked = False
-                for _ in range(10):
-                    page.wait_for_timeout(1000)
+                log("サジェストを確認中...")
+                
+                # サジェストが出るまで少し待機を強める
+                page.wait_for_timeout(2000)
+                
+                for _ in range(12): # 最大約12秒待機
                     for sel in [
                         '[data-testid="location-suggestion"]',
                         'ul[role="listbox"] li',
                         '[role="option"]',
                         'li[role="option"]',
+                        'div[aria-label*="住所"]',
                     ]:
                         try:
-                            suggestion = page.query_selector(sel)
-                            if suggestion:
-                                suggestion.click()
-                                suggestion_clicked = True
-                                break
+                            suggestions = page.query_selector_all(sel)
+                            if suggestions:
+                                # 最初の有効なサジェストをクリック
+                                for sug in suggestions:
+                                    text = sug.text_content() or ""
+                                    if text.strip():
+                                        sug.click()
+                                        suggestion_clicked = True
+                                        log(f"サジェストを選択しました: {text.strip()[:20]}...")
+                                        break
+                            if suggestion_clicked: break
                         except Exception:
                             continue
-                    if suggestion_clicked:
-                        break
+                    if suggestion_clicked: break
+                    page.wait_for_timeout(1000)
                 
                 if not suggestion_clicked:
+                    log("サジェストが見つかりませんでした。Enterキーを送信します。")
                     page.keyboard.press("Enter")
                 
-                # サジェスト選択後、「配達」ボタンなど確認ボタンを押す
-                page.wait_for_timeout(2000)
+                # サジェスト選択後、またはEnter後の画面遷移を待つ
+                page.wait_for_timeout(3000)
+                
+                # 「配達時間」や「今すぐ配達」などのモーダル、または配達ボタンが出る場合
                 for confirm_sel in [
                     'button[data-testid="delivery-mode-button"]',
                     'button:has-text("配達")',
                     'button:has-text("今すぐ配達")',
+                    'button:has-text("検索")',
+                    'button:has-text("Done")',
                     'form button[type="submit"]',
-                    'button.sf-btn--primary',
                 ]:
                     try:
                         btn = page.query_selector(confirm_sel)
-                        if btn:
+                        if btn and btn.is_visible():
                             btn.click()
+                            page.wait_for_timeout(2000)
                             break
                     except Exception:
                         continue
@@ -536,7 +587,7 @@ def main():
                 try:
                     page.wait_for_selector('a[href*="/store/"]', timeout=20000)
                 except Exception:
-                    page.wait_for_timeout(6000)
+                    page.wait_for_timeout(5000)
                 
                 page.screenshot(path="debug_step4_result.png")
             

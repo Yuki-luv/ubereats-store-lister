@@ -33,6 +33,12 @@ def check_password():
 
     if not st.session_state.password_correct:
         st.title("🔒 ログイン")
+        
+        # Secretsが設定されているか確認
+        if "password" not in st.secrets:
+            st.error("エラー: StreamlitのSecretsに 'password' が設定されていません。管理画面から設定してください。")
+            st.stop()
+            
         pwd = st.text_input("パスワード", type="password")
         if st.button("ログイン"):
             if pwd == st.secrets["password"]: # StreamlitのSecretsに設定したパスワード

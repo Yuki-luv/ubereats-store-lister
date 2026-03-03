@@ -6,9 +6,12 @@ def status_cb(msg):
     print(f"STATUS: {msg}")
 
 print("=== Starting scrape for 新宿区 (3 stores) ===")
-stores = run_scraper("新宿区", 3, status_callback=status_cb)
+stores, total_count, error_log = run_scraper("新宿区", 3, status_callback=status_cb)
 
-print(f"\n=== Results: {len(stores)} stores ===\n")
+if error_log:
+    print(f"\nERROR LOG:\n{error_log}")
+
+print(f"\n=== Results: {len(stores)} stores (Total Found: {total_count}) ===\n")
 for i, s in enumerate(stores):
     raw_phone = s.get("phone", "")
     norm_phone = normalize_phone(raw_phone)
