@@ -39,11 +39,7 @@ def dismiss_cookie_banner(page):
 def cleanup_overlays(page):
     """プロモーション、クッキー、Uber Oneなどのオーバーレイを掃除する"""
     try:
-        # 1. 座標指定クリック（右下のOKボタン付近）- クッキー用
-        page.mouse.click(1150, 750) 
-        page.wait_for_timeout(300)
-        
-        # 2. セレクタによるクリック
+        # 1. セレクタによるクリック
         selectors = [
             '[data-testid="accept-button"]',
             '#cookie-banner button',
@@ -513,8 +509,8 @@ def main():
             if city_match:
                 simplified_query = city_match.group(1)
             
-            # 最初は「日本 〇〇市」のように入力して候補を出やすくする
-            address_query = f"日本 {simplified_query}"
+            # 最初は「〇〇市」のようにシンプルに入力（日本 などの接頭辞は候補を絞りすぎる場合があるため）
+            address_query = simplified_query
             log(f"住所をクラウド向けに簡略化しました: {original_query} -> {address_query}")
 
             # --- Step 1: ページアクセス ---
@@ -540,11 +536,9 @@ def main():
                 page.wait_for_timeout(2000)
                 
             else:
-                # フィードページで住所を入力して検索
-                log("Uber Eats Japan Home ページにアクセス中...")
                 # フィードよりトップページの方が住所入力欄が確実に出る場合がある
-                page.goto(f"{BASE_URL}/jp", wait_until="domcontentloaded", timeout=30000)
-                page.wait_for_timeout(5000)
+                page.goto(f"{BASE_URL}/jp", wait_until="networkidle", timeout=45000)
+                page.wait_for_timeout(3000)
                 page.screenshot(path="debug_step1_loaded.png")
                 
                 # ダイアログを掃除（何度か呼ぶ）
@@ -606,16 +600,8 @@ def main():
                             suggestion_selected = True
                             break
                     
-                    if not suggestion_selected:
-                        log("候補が出ませんでした。中心座標クリック + Enterで強行します。")
-                        page.mouse.click(400, 500)
-                        page.wait_for_timeout(1000)
-                        page.keyboard.press("Enter")
                 else:
-                    log("エラー: 入力欄が見つかりません。盲目的入力を試みます。")
-                    page.mouse.click(400, 620)
-                    page.wait_for_timeout(500)
-                    page.keyboard.type(address_query)
+                    log("エラー: 入力欄が見つかりません。Enterキーを送信します。")
                     page.keyboard.press("Enter")
                 
                 page.wait_for_timeout(5000)
