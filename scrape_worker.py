@@ -444,54 +444,67 @@ def main():
                 log("Uber Eats Japan にアクセス中...")
                 page.goto(FEED_URL, wait_until="domcontentloaded", timeout=30000)
                 page.wait_for_timeout(5000)
+                page.screenshot(path="debug_step1_loaded.png")
                 
                 log(f"住所「{address_query}」を入力中...")
                 
-                # ページ上の入力フィールドを探してクリック → キーボード入力
-                input_clicked = False
+                # Step1: 住所入力を起動するボタン/エリアをクリック
+                location_opened = False
                 for sel in [
-                    'input[type="text"]',
-                    'input[placeholder*="住所"]',
-                    'input[placeholder*="address"]',
+                    '[data-testid="address-input"]',
                     '[data-testid="location-input"]',
+                    'button[aria-label*="住所"]',
+                    'button[aria-label*="location"]',
+                    'input[type="text"]',
+                    'input[placeholder]',
                 ]:
-                    el = page.query_selector(sel)
-                    if el:
-                        el.click()
-                        page.wait_for_timeout(1000)
-                        el.fill("")
-                        el.type(address_query, delay=80)
-                        input_clicked = True
-                        break
+                    try:
+                        el = page.wait_for_selector(sel, timeout=3000)
+                        if el:
+                            el.click()
+                            page.wait_for_timeout(1500)
+                            location_opened = True
+                            break
+                    except Exception:
+                        continue
                 
-                if not input_clicked:
-                    # フォールバック: フォーカス可能な最初のinputをクリック
-                    page.keyboard.press("Tab")
-                    page.keyboard.type(address_query, delay=80)
+                page.screenshot(path="debug_step2_clicked.png")
                 
-                # サジェストが出るまで待機（最大8秒）
-                suggestion_appeared = False
-                for _ in range(8):
+                # Step2: 文字を入力
+                try:
+                    page.keyboard.type(address_query, delay=100)
+                except Exception:
+                    pass
+                
+                page.wait_for_timeout(3000)
+                page.screenshot(path="debug_step3_typed.png")
+                
+                # Step3: サジェストを最大10秒待ってクリック
+                suggestion_clicked = False
+                for _ in range(10):
                     page.wait_for_timeout(1000)
                     for sel in [
                         '[data-testid="location-suggestion"]',
                         'ul[role="listbox"] li',
                         '[role="option"]',
+                        'li[role="option"]',
                     ]:
-                        suggestion = page.query_selector(sel)
-                        if suggestion:
-                            suggestion.click()
-                            suggestion_appeared = True
-                            break
-                    if suggestion_appeared:
+                        try:
+                            suggestion = page.query_selector(sel)
+                            if suggestion:
+                                suggestion.click()
+                                suggestion_clicked = True
+                                break
+                        except Exception:
+                            continue
+                    if suggestion_clicked:
                         break
                 
-                if not suggestion_appeared:
-                    # サジェストがなければEnterで検索
+                if not suggestion_clicked:
                     page.keyboard.press("Enter")
                 
-                # 店舗リストが読み込まれるまで待機
-                page.wait_for_timeout(5000)
+                page.wait_for_timeout(6000)
+                page.screenshot(path="debug_step4_result.png")
             
             # --- Step 2: 店舗リンクを収集 ---
             log(f"店舗リストを収集中... (目標: {max_stores}件{'、大手チェーン除外' if exclude_chains else ''})")
