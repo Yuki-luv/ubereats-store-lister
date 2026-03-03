@@ -460,15 +460,19 @@ def main():
         
         try:
             # --- Step 1: ページアクセス ---
+            address_query = address_query.strip()
             slug = area_to_slug(address_query)
+            log(f"デバッグ: input='{address_query}', slug='{slug}'")
             
             # Cityページは20〜30件しか表示されないため、大量取得時はフィード検索を使う
             use_city_page = bool(slug) and max_stores <= 25
+            log(f"デバッグ: use_city_page={use_city_page}")
             
             if use_city_page:
                 log(f"都市ページにアクセス中... ({slug})")
                 page.goto(f"{BASE_URL}/jp/city/{slug}", wait_until="domcontentloaded", timeout=30000)
                 page.wait_for_timeout(4000)
+                page.screenshot(path="debug_step1_loaded.png")
             else:
                 # フィードページで住所を入力して検索（無限スクロール可能）
                 log("Uber Eats Japan にアクセス中...")
@@ -481,6 +485,8 @@ def main():
                 # 強制的に右下をクリック（Cookie 同意ボタンの一般的な位置）
                 # ユーザーのスクショで右下に [OK] ボタンがあるのを確認
                 page.mouse.click(1150, 750) 
+                page.wait_for_timeout(500)
+                page.mouse.click(1100, 770) # 少しずらして再試行
                 page.wait_for_timeout(1000)
                 
                 cookie_handled = False

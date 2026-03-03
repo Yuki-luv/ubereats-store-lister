@@ -241,11 +241,13 @@ with col_btn:
 if search_clicked and area_input:
     st.session_state.search_query = area_input
     
-    if os.path.exists("debug_screenshot.png"):
-        try:
-            os.remove("debug_screenshot.png")
-        except:
-            pass
+    # 古いデバッグ用画像を削除
+    for f in ["debug_screenshot.png", "debug_step1_loaded.png", "debug_step2_clicked.png", "debug_step3_typed.png", "debug_step4_result.png"]:
+        if os.path.exists(f):
+            try:
+                os.remove(f)
+            except:
+                pass
             
     progress_bar = st.progress(0, text="準備中...")
     status_text = st.empty()

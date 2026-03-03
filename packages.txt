@@ -15,3 +15,4 @@ libxfixes3
 libxext6
 libx11-6
 libxcb1
+fonts-noto-cjk
