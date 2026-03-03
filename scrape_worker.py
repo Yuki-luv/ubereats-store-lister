@@ -576,51 +576,68 @@ def main():
                         log(f"入力フィールドにフォーカス中: {query}")
                         el.click(force=True)
                         page.wait_for_timeout(1000)
-                        
                         # 1. 既存の値を消去
                         el.fill("")
                         page.wait_for_timeout(500)
-                        
                         # 2. insert_text (キーイベントをバイパスして直接注入)
-                        # これがReactなどの複雑なフレームワークで最も確実に値を入れる方法の一つです
                         page.keyboard.insert_text(query)
                         page.wait_for_timeout(1000)
-                        
-                        # 3. 入力されたか確認。空なら type でリトライ
+                        # 3. 入力されたか確認
                         val = el.input_value()
                         if not val or val != query:
                             log("警告: insert_text が不完全です。通常のタイピングでリトライします。")
                             el.type(query, delay=100)
-                        
                         # 4. 最終確認
                         if not el.input_value():
                             log("致命的: 入力が反映されません。JavaScriptでの強制上書きを試みます。")
                             page.evaluate("(el, val) => { el.focus(); el.value = val; el.dispatchEvent(new Event('input', {bubbles:true})); el.dispatchEvent(new Event('change', {bubbles:true})); }", el, query)
-                        
                         return True
                     except Exception as e:
                         log(f"入力警告: {str(e)}")
                         return False
 
-                robust_input(target_input, address_query)
+                # 候補を絶対に出して選択するループ
+                address_variations = [
+                    simplified_query,
+                    f"大阪府{simplified_query}" if "大阪" in simplified_query else simplified_query,
+                    f"日本 {simplified_query}"
+                ]
                 
-                page.wait_for_timeout(3000) # サジェスト待機
-                page.screenshot(path="debug_step3_typed.png")
-                
-                # サジェストを選択
                 suggestion_selected = False
-                for sug_sel in ['[role="option"]', '[data-testid="location-suggestion"]', 'li[role="option"]']:
-                    suggestions = page.query_selector_all(sug_sel)
-                    if suggestions:
-                        log(f"候補リストを確認: {len(suggestions)}件。最初の候補を選択します。")
-                        suggestions[0].click()
+                for variation in address_variations:
+                    log(f"入力試行中: {variation}")
+                    robust_input(target_input, variation)
+                    
+                    # サジェスト待機
+                    for _ in range(3):
                         page.wait_for_timeout(2000)
-                        suggestion_selected = True
-                        break
-                
+                        page.screenshot(path="debug_step3_typed.png")
+                        
+                        # サジェストを選択
+                        for sug_sel in ['[role="option"]', '[data-testid="location-suggestion"]', 'li[role="option"]']:
+                            suggestions = page.query_selector_all(sug_sel)
+                            if suggestions:
+                                log(f"候補リストを確認: {len(suggestions)}件。最初の候補を選択します。")
+                                try:
+                                    suggestions[0].click()
+                                    page.wait_for_timeout(2000)
+                                    suggestion_selected = True
+                                    break
+                                except: continue
+                        if suggestion_selected: break
+                    if suggestion_selected: break
+                    log(f"「{variation}」では候補が出ませんでした。次のパターンを試します。")
+
                 if not suggestion_selected:
-                    log("候補が出ませんでした。Enterキーを送信します。")
+                    log("全てのパターンで候補が出ませんでした。最後の手段としてEnterキーと座標クリックを試みます。")
                     page.keyboard.press("Enter")
+                    # 入力欄のすぐ下（候補が出る場所）を試しにクリック
+                    try:
+                        box = target_input.bounding_box()
+                        if box:
+                            page.mouse.click(box['x'] + 50, box['y'] + box['height'] + 30)
+                            page.wait_for_timeout(1000)
+                    except: pass
             else:
                 log("エラー: 入力欄が見つかりません。")
                 page.keyboard.press("Enter")
