@@ -543,6 +543,34 @@ def main():
             
             full_params = f"?{JAPAN_PARAMS}{coord_params}"
 
+            # --- [新機能] すべての国ページから日本を明示的に選択する ---
+            try:
+                log("地域を日本に固定するため、国一覧ページを経由します...")
+                page.goto(f"{BASE_URL}/all-countries-list", wait_until="networkidle", timeout=30000)
+                cleanup_overlays(page)
+                
+                # 「日本」のリンクを探してクリック
+                japan_link_selectors = [
+                    'a:has-text("日本")',
+                    'a:has-text("Japan")',
+                    'a[href*="/jp"]'
+                ]
+                
+                clicked_japan = False
+                for j_sel in japan_link_selectors:
+                    link = page.query_selector(j_sel)
+                    if link and link.is_visible():
+                        log(f"国一覧から日本を選択: {j_sel}")
+                        link.click()
+                        clicked_japan = True
+                        page.wait_for_timeout(3000)
+                        break
+                
+                if not clicked_japan:
+                    log("国一覧に日本のリンクが見つかりません。直接進みます。")
+            except Exception as e:
+                log(f"国選択ステップでエラー（スキップします）: {str(e)}")
+
             if use_city_page:
                 start_url = f"{BASE_URL}/jp/city/{slug}{full_params}"
                 log(f"都市ページから開始します: {slug}")
