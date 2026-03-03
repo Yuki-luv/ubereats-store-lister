@@ -490,36 +490,24 @@ def main():
         
         try:
             # --- Step 0: 住所の正規化（精度の向上） ---
-            # 「大阪市北区」などの場合に「大阪府」を補完することでヒット率を上げる
+            # WEB環境（特にクラウド）では、国名や府名を付けないとヒットしない場合があります。
             original_query = address_query.strip()
-            if original_query.startswith(("大阪市", "堺市", "豊中市", "吹田市", "枚方市")):
-                normalized_query = "大阪府" + original_query
-            elif original_query.startswith(("京都市", "宇治市")):
-                normalized_query = "京都府" + original_query
-            elif original_query.startswith(("名古屋市", "豊田市")):
-                normalized_query = "愛知県" + original_query
-            elif original_query.startswith(("福岡市", "北九州市")):
-                normalized_query = "福岡県" + original_query
-            elif original_query.startswith(("横浜市", "川崎市", "相模原市")):
-                normalized_query = "神奈川県" + original_query
-            elif original_query.startswith(("さいたま市", "川口市")):
-                normalized_query = "埼玉県" + original_query
-            elif original_query.startswith(("千葉市", "船橋市")):
-                normalized_query = "千葉県" + original_query
-            elif original_query.startswith(("札幌市")):
-                normalized_query = "北海道" + original_query
-            elif original_query.startswith(("広島市")):
-                normalized_query = "広島県" + original_query
-            elif original_query.startswith(("仙台市")):
-                normalized_query = "宮城県" + original_query
-            elif original_query.startswith(("23区", "港区", "新宿区", "渋谷区", "中央区", "千代田区")):
-                # 既に府や都がついている場合はそのまま、なければ東京都
-                if "都" not in original_query and "府" not in original_query:
-                    normalized_query = "東京都" + original_query
+            # 「日本 〇〇府 〇〇市...」という形式を試みる
+            normalized_query = original_query
+            if not original_query.startswith("日本"):
+                if original_query.startswith(("大阪市", "堺市", "豊中市", "吹田市", "枚方市", "大阪府")):
+                    if not original_query.startswith("大阪府"):
+                        normalized_query = "日本 大阪府" + original_query
+                    else:
+                        normalized_query = "日本 " + original_query
+                elif original_query.startswith(("東京都", "23区", "港区", "新宿区", "渋谷区", "中央区", "千代田区")):
+                    if not original_query.startswith("東京都"):
+                        normalized_query = "日本 東京都" + original_query
+                    else:
+                        normalized_query = "日本 " + original_query
                 else:
-                    normalized_query = original_query
-            else:
-                normalized_query = original_query
+                    # 汎用的に「日本 」を付けてみる
+                    normalized_query = "日本 " + original_query
             
             log(f"住所を正規化しました: {original_query} -> {normalized_query}")
             address_query = normalized_query
@@ -583,30 +571,41 @@ def main():
                     page.keyboard.type(address_query, delay=100)
                     page.keyboard.press("Enter")
                 else:
-                    def type_address(query):
+                    def type_address_and_select(query):
+                        log(f"入力を試行中: {query}")
                         input_el.click()
                         page.wait_for_timeout(500)
-                        page.keyboard.press("Control+A")
-                        page.keyboard.press("Backspace")
+                        input_el.press("Control+A")
+                        input_el.press("Backspace")
                         page.wait_for_timeout(500)
-                        input_el.fill(query)
-                        page.wait_for_timeout(1000)
-                        return input_el.input_value()
+                        
+                        # 1文字ずつ入力（サジェストを発生させるため）
+                        page.keyboard.type(query, delay=150)
+                        page.wait_for_timeout(2500)
+                        
+                        # サジェストが出るか確認
+                        suggestions = page.query_selector_all('[role="option"]')
+                        if suggestions:
+                            log(f"サジェストを検出、最初の項目をクリックします ({len(suggestions)}件)")
+                            suggestions[0].click()
+                            page.wait_for_timeout(2000)
+                            return True
+                        
+                        # サジェストが出ない場合、末尾にスペースを入れてみる
+                        page.keyboard.type(" ")
+                        page.wait_for_timeout(2000)
+                        suggestions = page.query_selector_all('[role="option"]')
+                        if suggestions:
+                            suggestions[0].click()
+                            return True
+                            
+                        return False
 
-                    current_val = type_address(address_query)
+                    success = type_address_and_select(address_query)
                     
-                    # 「住所が見つかりませんでした」エラーのチェック
-                    # ユーザーのスクショで確認した文字列
-                    error_check_text = "住所が見つかりませんでした"
-                    if error_check_text in page.content():
-                        log(f"警告: '{address_query}' が見つかりません。フォールバックを試みます。")
-                        # 「府」や「市」を削ってみるなどのリトライ（または元のクエリ）
-                        if address_query != original_query:
-                            type_address(original_query)
-                        else:
-                            # 最後の手段としてスペースを入れて再入力させ、サジェストを促す
-                            input_el.type(" ")
-                            page.wait_for_timeout(1000)
+                    if not success and address_query != original_query:
+                        log("正規化住所で失敗、元の住所で再試行します...")
+                        success = type_address_and_select(original_query)
                 
                 page.screenshot(path="debug_step3_typed.png")
                 
