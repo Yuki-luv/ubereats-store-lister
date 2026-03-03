@@ -515,9 +515,26 @@ def main():
                 if not suggestion_clicked:
                     page.keyboard.press("Enter")
                 
-                # 店舗リンクが現れるまで最大15秒待機
+                # サジェスト選択後、「配達」ボタンなど確認ボタンを押す
+                page.wait_for_timeout(2000)
+                for confirm_sel in [
+                    'button[data-testid="delivery-mode-button"]',
+                    'button:has-text("配達")',
+                    'button:has-text("今すぐ配達")',
+                    'form button[type="submit"]',
+                    'button.sf-btn--primary',
+                ]:
+                    try:
+                        btn = page.query_selector(confirm_sel)
+                        if btn:
+                            btn.click()
+                            break
+                    except Exception:
+                        continue
+                
+                # 店舗リンクが現れるまで最大20秒待機
                 try:
-                    page.wait_for_selector('a[href*="/store/"]', timeout=15000)
+                    page.wait_for_selector('a[href*="/store/"]', timeout=20000)
                 except Exception:
                     page.wait_for_timeout(6000)
                 
