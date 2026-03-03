@@ -446,15 +446,28 @@ def main():
                 page.wait_for_timeout(5000)
                 page.screenshot(path="debug_step1_loaded.png")
                 
+                # クッキー同意ダイアログを閉じる
+                for cookie_sel in [
+                    'button:has-text("OK")',
+                    'button:has-text("同意")',
+                    'button:has-text("Accept")',
+                    '[data-testid="accept-button"]',
+                ]:
+                    try:
+                        btn = page.query_selector(cookie_sel)
+                        if btn:
+                            btn.click()
+                            page.wait_for_timeout(1000)
+                            break
+                    except Exception:
+                        continue
+                
                 log(f"住所「{address_query}」を入力中...")
                 
-                # Step1: 住所入力を起動するボタン/エリアをクリック
-                location_opened = False
+                # 入力フィールドをクリック
                 for sel in [
                     '[data-testid="address-input"]',
                     '[data-testid="location-input"]',
-                    'button[aria-label*="住所"]',
-                    'button[aria-label*="location"]',
                     'input[type="text"]',
                     'input[placeholder]',
                 ]:
@@ -462,15 +475,14 @@ def main():
                         el = page.wait_for_selector(sel, timeout=3000)
                         if el:
                             el.click()
-                            page.wait_for_timeout(1500)
-                            location_opened = True
+                            page.wait_for_timeout(1000)
                             break
                     except Exception:
                         continue
                 
                 page.screenshot(path="debug_step2_clicked.png")
                 
-                # Step2: 文字を入力
+                # 文字を入力
                 try:
                     page.keyboard.type(address_query, delay=100)
                 except Exception:
@@ -479,7 +491,7 @@ def main():
                 page.wait_for_timeout(3000)
                 page.screenshot(path="debug_step3_typed.png")
                 
-                # Step3: サジェストを最大10秒待ってクリック
+                # サジェストを最大10秒待ってクリック
                 suggestion_clicked = False
                 for _ in range(10):
                     page.wait_for_timeout(1000)
@@ -503,7 +515,12 @@ def main():
                 if not suggestion_clicked:
                     page.keyboard.press("Enter")
                 
-                page.wait_for_timeout(6000)
+                # 店舗リンクが現れるまで最大15秒待機
+                try:
+                    page.wait_for_selector('a[href*="/store/"]', timeout=15000)
+                except Exception:
+                    page.wait_for_timeout(6000)
+                
                 page.screenshot(path="debug_step4_result.png")
             
             # --- Step 2: 店舗リンクを収集 ---
