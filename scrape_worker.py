@@ -540,128 +540,89 @@ def main():
                 page.wait_for_timeout(2000)
                 
             else:
-                # フィードページで住所を入力して検索（無限スクロール可能）
-                log("Uber Eats Japan にアクセス中...")
-                page.goto(FEED_URL, wait_until="domcontentloaded", timeout=30000)
+                # フィードページで住所を入力して検索
+                log("Uber Eats Japan Home ページにアクセス中...")
+                # フィードよりトップページの方が住所入力欄が確実に出る場合がある
+                page.goto(f"{BASE_URL}/jp", wait_until="domcontentloaded", timeout=30000)
                 page.wait_for_timeout(5000)
                 page.screenshot(path="debug_step1_loaded.png")
                 
-                # クッキー同意ダイアログを閉じる
-                dismiss_cookie_banner(page)
+                # ダイアログを掃除（何度か呼ぶ）
+                cleanup_overlays(page)
+                page.wait_for_timeout(1000)
                 
-                log(f"住所「{address_query}」を入力中...")
+                log(f"住所「{address_query}」を精密入力中...")
                 
-                # 入力フィールドを取得
-                input_el = None
-                success = False # 初期化
-                for sel in [
+                # 入力フィールドを徹底的に探す
+                selectors = [
+                    '[data-testid="location-typeahead-home-input"]',
                     '[data-testid="address-input"]',
-                    '[data-testid="location-typeahead-input"]',
-                    'input[id="location-typeahead-home-input"]',
-                    'input[aria-label*="住所"]',
                     'input[placeholder*="住所"]',
+                    'input[aria-label*="住所"]',
                     'input[placeholder*="Address"]',
-                    'input[type="text"]',
-                ]:
+                    '#location-typeahead-home-input',
+                ]
+                
+                target_input = None
+                for sel in selectors:
                     try:
-                        input_el = page.wait_for_selector(sel, timeout=3000)
-                        if input_el:
-                            input_el.click()
-                            page.screenshot(path="debug_step2_clicked.png")
+                        target_input = page.wait_for_selector(sel, timeout=3000)
+                        if target_input and target_input.is_visible():
+                            log(f"入力フィールドを特定: {sel}")
                             break
-                    except Exception:
-                        continue
-                
-                if not input_el:
-                    log("警告: 入力フィールドが見つかりませんでした。Enterキーによる続行を試みます。")
-                    page.keyboard.type(address_query, delay=100)
-                    page.keyboard.press("Enter")
-                    success = True # Enterを押したので一応成功とする
-                else:
-                    def type_address_and_select(query):
-                        log(f"入力を試行中: {query}")
-                        try:
-                            # 1. フィールドをクリア（Control+AはLinuxで不安定なためfillを使う）
-                            input_el.click()
-                            page.wait_for_timeout(500)
-                            input_el.fill("")
-                            page.wait_for_timeout(500)
-                            
-                            # 2. 1文字ずつ入力（サジェストを発生させるため）
-                            page.keyboard.type(query, delay=100)
-                            page.wait_for_timeout(3000)
-                            
-                            # 3. サジェストが出るか確認
-                            for sug_sel in ['[role="option"]', '[data-testid="location-suggestion"]', 'li[role="option"]']:
-                                suggestions = page.query_selector_all(sug_sel)
-                                if suggestions:
-                                    log(f"サジェストを検出 ({len(suggestions)}件)。確定します。")
-                                    suggestions[0].click()
-                                    page.wait_for_timeout(2000)
-                                    return True
-                            
-                            # サジェストが出ない場合、末尾にスペースを入れてみる
-                            page.keyboard.type(" ")
-                            page.wait_for_timeout(2000)
-                            suggestions = page.query_selector_all('[role="option"]')
-                            if suggestions:
-                                suggestions[0].click()
-                                return True
-                        except Exception as e:
-                            log(f"デバッグ: 入力試行中に例外発生: {str(e)}")
-                            
-                        return False
+                    except: continue
 
-                    success = type_address_and_select(address_query)
-                    if not success and address_query != original_query:
-                        log("正規化住所で失敗、元の住所で再試行します...")
-                        success = type_address_and_select(original_query)
-                
-                page.screenshot(path="debug_step3_typed.png")
-                
-                # サジェストを待ってクリック（既に行っているが成功フラグを立てる）
-                suggestion_clicked = success
-                page.wait_for_timeout(2000)
-                
-                if not suggestion_clicked:
-                    log("サジェストが未選択です。Enterキーを送信します。")
-                    page.keyboard.press("Enter")
-                
-                page.wait_for_timeout(3000)
-                
-                # 確定ボタン（今すぐ配達、検索など）
-                confirmed = False
-                for _ in range(2): # 2回試行
-                    cleanup_overlays(page)
-                    for confirm_sel in [
-                        '[data-testid="delivery-mode-button"]',
-                        '[data-testid="submit-button"]',
-                        'button[type="submit"]',
-                        'button:has-text("フードを探す")',
-                        'button:has-text("配達")',
-                        'button:has-text("今すぐ")',
-                    ]:
+                    # 共通入力処理 (JavaScriptによる強制セット + キーボード入力)
+                    def nuclear_input(el, query):
                         try:
-                            # セレクタで見つかる要素全てに対してクリックを試みる（隠れている場合があるため）
-                            btns = page.query_selector_all(confirm_sel)
-                            for btn in btns:
-                                if btn and btn.is_visible():
-                                    btn.click(force=True)
-                                    confirmed = True
-                                    page.wait_for_timeout(4000)
-                                    break
-                            if confirmed: break
-                        except Exception:
-                            continue
-                    if confirmed: break
+                            el.click()
+                            page.wait_for_timeout(500)
+                            # JSで強制セット（イベントも着火）
+                            page.evaluate("(el, val) => { el.value = val; el.dispatchEvent(new Event('input', {bubbles:true})); }", el, query)
+                            page.wait_for_timeout(500)
+                            # ダメ押しでキーボード入力
+                            page.keyboard.type(query, delay=100)
+                            return True
+                        except: return False
+
+                    nuclear_input(target_input, address_query)
+                    
+                    page.wait_for_timeout(3000) # サジェスト待機
+                    page.screenshot(path="debug_step3_typed.png")
+                    
+                    # サジェストを選択
+                    suggestion_selected = False
+                    for sug_sel in ['[role="option"]', '[data-testid="location-suggestion"]', 'li[role="option"]']:
+                        suggestions = page.query_selector_all(sug_sel)
+                        if suggestions:
+                            log(f"候補リストを確認: {len(suggestions)}件。最初の候補を選択します。")
+                            suggestions[0].click()
+                            page.wait_for_timeout(2000)
+                            suggestion_selected = True
+                            break
+                    
+                    if not suggestion_selected:
+                        log("候補が出ませんでした。中心座標クリック + Enterで強行します。")
+                        # 画面中央やや下（入力欄の下あたり）を適当にクリックして候補を無理やり選ぶ試み
+                        page.mouse.click(400, 500)
+                        page.wait_for_timeout(1000)
+                        page.keyboard.press("Enter")
+                else:
+                    log("エラー: 入力欄が見つかりません。盲目的入力を試みます。")
+                    # 1280x800 での一般的な入力欄位置をクリック
+                    page.mouse.click(400, 620)
+                    page.wait_for_timeout(500)
+                    page.keyboard.type(address_query)
                     page.keyboard.press("Enter")
-                    page.wait_for_timeout(3000)
                 
-                # --- 追加の安全策: FAQページに飛ばされた場合のリカバリ ---
-                if "uber-one" in page.url or "help" in page.url or "faq" in page.url:
-                    log("警告: FAQ/プロモーションページに飛ばされました。戻ります。")
-                    page.go_back()
+                page.wait_for_timeout(5000)
+                
+                # --- 追加: FAQに飛ばされた場合の緊急脱出 ---
+                if "help" in page.url or "faq" in page.url or "uber-one" in page.url:
+                    log("警告: FAQページを検出。トップに戻ります。")
+                    page.goto(f"{BASE_URL}/jp")
                     page.wait_for_timeout(3000)
+                    # 再度Enter
                     page.keyboard.press("Enter")
                     page.wait_for_timeout(5000)
                 
