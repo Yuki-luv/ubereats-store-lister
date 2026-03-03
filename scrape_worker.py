@@ -9,10 +9,9 @@ import json
 import re
 import sys
 import time
-import os
 from typing import Optional
 from playwright.sync_api import sync_playwright
-from playwright_stealth import stealth_sync
+from playwright_stealth import stealth
 
 # Windows環境でのリダイレクト時に文字化けを防ぐため、UTF-8固定にする
 if sys.stdout.encoding != 'utf-8':
@@ -426,7 +425,7 @@ def main():
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         )
         page = context.new_page()
-        stealth_sync(page)
+        stealth(page)
         
         try:
             # --- Step 1: ページアクセス ---
