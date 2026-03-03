@@ -31,6 +31,36 @@ def log(msg: str):
     print(json.dumps({"type": "status", "message": msg}), flush=True)
 
 
+def dismiss_cookie_banner(page):
+    """クッキー同意ダイアログを閉じる"""
+    try:
+        page.wait_for_timeout(2000)
+        # 1. 座標指定クリック（右下のOKボタン付近）- ユーザーのスクショで位置を確認
+        page.mouse.click(1150, 750) 
+        page.wait_for_timeout(500)
+        page.mouse.click(1100, 770) # 少しずらして予備クリック
+        
+        # 2. セレクタによるクリック
+        for cookie_sel in [
+            '[data-testid="accept-button"]',
+            '#cookie-banner button',
+            'button[id*="cookie"]',
+            'button:has-text("OK")',
+            'button:has-text("同意")',
+            'button:has-text("了解")',
+        ]:
+            try:
+                btn = page.query_selector(cookie_sel)
+                if btn and btn.is_visible():
+                    btn.click(force=True)
+                    page.wait_for_timeout(1000)
+                    break
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+
 def emit_result(data: list, total_count: int = 0):
     """結果をJSON形式で標準出力に書き出す"""
     print(json.dumps({
@@ -239,15 +269,15 @@ AREA_SLUG_MAP = {
     "文京区": "bunkyo-tokyo",
     "横浜": "yokohama-kanagawa", "横浜市": "yokohama-kanagawa",
     "川崎": "kawasaki-kanagawa", "川崎市": "kawasaki-kanagawa",
-    "大阪": "osaka-osaka", "大阪市": "osaka-osaka", "大阪市北区": "osaka-osaka", "大阪市中央区": "osaka-osaka", "大阪市西区": "osaka-osaka", "大阪市浪速区": "osaka-osaka",
-    "名古屋": "nagoya-aichi", "名古屋市": "nagoya-aichi", "中区": "nagoya-aichi", "中村区": "nagoya-aichi",
-    "福岡": "fukuoka-fukuoka", "福岡市": "fukuoka-fukuoka", "博多区": "fukuoka-fukuoka", "中央区": "fukuoka-fukuoka",
-    "札幌": "sapporo-hokkaido", "札幌市": "sapporo-hokkaido", "中央区": "sapporo-hokkaido",
-    "仙台": "sendai-miyagi", "仙台市": "sendai-miyagi", "青葉区": "sendai-miyagi",
-    "神戸": "kobe-hyogo", "神戸市": "kobe-hyogo", "中央区": "kobe-hyogo",
-    "京都": "kyoto-kyoto", "京都市": "kyoto-kyoto", "下京区": "kyoto-kyoto", "中京区": "kyoto-kyoto",
-    "広島": "hiroshima-hiroshima", "広島市": "hiroshima-hiroshima", "中区": "hiroshima-hiroshima",
-    "さいたま": "saitama-saitama", "さいたま市": "saitama-saitama", "大宮区": "saitama-saitama", "浦和区": "saitama-saitama",
+    "大阪": "osaka-osaka", "大阪市": "osaka-osaka",
+    "名古屋": "nagoya-aichi", "名古屋市": "nagoya-aichi",
+    "福岡": "fukuoka-fukuoka", "福岡市": "fukuoka-fukuoka",
+    "札幌": "sapporo-hokkaido", "札幌市": "sapporo-hokkaido",
+    "仙台": "sendai-miyagi", "仙台市": "sendai-miyagi",
+    "神戸": "kobe-hyogo", "神戸市": "kobe-hyogo",
+    "京都": "kyoto-kyoto", "京都市": "kyoto-kyoto",
+    "広島": "hiroshima-hiroshima", "広島市": "hiroshima-hiroshima",
+    "さいたま": "saitama-saitama", "さいたま市": "saitama-saitama",
     "千葉": "chiba-chiba", "千葉市": "chiba-chiba", "中央区": "chiba-chiba",
 }
 
@@ -471,8 +501,16 @@ def main():
             if use_city_page:
                 log(f"都市ページにアクセス中... ({slug})")
                 page.goto(f"{BASE_URL}/jp/city/{slug}", wait_until="domcontentloaded", timeout=30000)
-                page.wait_for_timeout(4000)
+                page.wait_for_timeout(5000)
                 page.screenshot(path="debug_step1_loaded.png")
+                
+                # クッキー同意ダイアログを閉じる
+                dismiss_cookie_banner(page)
+                
+                # シティページでは店舗を表示させるためにスクロールが必要な場合がある
+                page.evaluate("window.scrollBy(0, 500)")
+                page.wait_for_timeout(2000)
+                
             else:
                 # フィードページで住所を入力して検索（無限スクロール可能）
                 log("Uber Eats Japan にアクセス中...")
@@ -480,37 +518,8 @@ def main():
                 page.wait_for_timeout(5000)
                 page.screenshot(path="debug_step1_loaded.png")
                 
-                # クッキー同意ダイアログを閉じる (フォントが豆腐になるため座標やtestid優先)
-                page.wait_for_timeout(3000)
-                # 強制的に右下をクリック（Cookie 同意ボタンの一般的な位置）
-                # ユーザーのスクショで右下に [OK] ボタンがあるのを確認
-                page.mouse.click(1150, 750) 
-                page.wait_for_timeout(500)
-                page.mouse.click(1100, 770) # 少しずらして再試行
-                page.wait_for_timeout(1000)
-                
-                cookie_handled = False
-                for cookie_sel in [
-                    '[data-testid="accept-button"]',
-                    '#cookie-banner button',
-                    'button[id*="cookie"]',
-                    'button:has-text("OK")',
-                    'button:has-text("同意")',
-                ]:
-                    try:
-                        btn = page.query_selector(cookie_sel)
-                        if btn and btn.is_visible():
-                            btn.click(force=True)
-                            cookie_handled = True
-                            page.wait_for_timeout(1000)
-                            break
-                    except Exception:
-                        continue
-                
-                # ダイアログが消えない場合の強硬手段（右下のOKボタン付近をクリック）
-                if not cookie_handled:
-                    page.mouse.click(1100, 750) # 画面右下付近
-                    page.wait_for_timeout(1000)
+                # クッキー同意ダイアログを閉じる
+                dismiss_cookie_banner(page)
                 
                 log(f"住所「{address_query}」を入力中...")
                 
@@ -618,13 +627,13 @@ def main():
                 page.keyboard.press("Enter")
                 page.wait_for_timeout(5000)
                 
-                # 店舗リンクが現れるまで最大20秒待機
+                # 店舗リンクが現れるまで最大10秒待機
                 try:
-                    page.wait_for_selector('a[href*="/store/"]', timeout=20000)
+                    page.wait_for_selector('a[href*="/store/"]', timeout=10000)
                 except Exception:
-                    page.wait_for_timeout(5000)
+                    pass
                 
-                page.screenshot(path="debug_step4_result.png")
+            page.screenshot(path="debug_step4_result.png")
             
             # --- Step 2: 店舗リンクを収集 ---
             log(f"店舗リストを収集中... (目標: {max_stores}件{'、大手チェーン除外' if exclude_chains else ''})")
