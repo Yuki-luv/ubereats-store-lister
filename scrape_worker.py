@@ -482,13 +482,14 @@ def main():
             # --- 追加: 地域全体の店舗数（合計件数）を抽出 ---
             total_count_text = ""
             try:
-                # 「◯◯件以上の店舗」などのテキストを探す
+                # 「◯◯件以上のレストラン」などのテキストを探す
                 # 複数のセレクタを試す
                 for sel in ["h1", "h2", "[data-testid='feed-header']"]:
                     el = page.query_selector(sel)
                     if el:
                         text = el.text_content()
-                        if "店舗" in text and any(c.isdigit() for c in text):
+                        # 「件」が含まれていて数字が含まれている場合に合計数と見なす
+                        if "件" in text and any(c.isdigit() for c in text):
                             total_count_text = text
                             break
             except:
